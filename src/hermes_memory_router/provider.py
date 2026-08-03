@@ -8,14 +8,15 @@ from typing import Any
 
 try:
     from agent.memory_provider import MemoryProvider
-except ImportError:  # Allows package tests outside Hermes.
+except ImportError:  # Keeps package tests usable when Hermes is not installed.
     class MemoryProvider:  # type: ignore[no-redef]
         pass
 
+from .compatibility import require_strict_hermes_compatibility
 from .config import RouterConfig, load_config
 from .factory import build_router
 from .router import MemoryRouter
-from .tools import TOOL_SCHEMAS, VERIFICATION_LEVELS
+from .tools import VERIFICATION_LEVELS, tool_schemas_for
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +39,21 @@ class HermesMemoryRouterProvider(MemoryProvider):
         return "hermes_memory_router"
 
     def is_available(self) -> bool:
+        """Perform only local package/config checks; never make a network call."""
+        home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+        config_path = home / "memory-router" / "config.json"
+        if not config_path.exists():
+            return False
         try:
-            import mnemosyne  # noqa: F401
+            config = load_config(config_path)
         except Exception:
             return False
-        home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
-        return (home / "memory-router" / "config.json").exists()
+        if config.policy.endswith("mnemosyne-checkpoints"):
+            try:
+                import mnemosyne  # noqa: F401
+            except Exception:
+                return False
+        return True
 
     def initialize(self, session_id: str, **kwargs) -> None:
         self._hermes_home = Path(
@@ -56,6 +66,8 @@ class HermesMemoryRouterProvider(MemoryProvider):
         self._platform = str(kwargs.get("platform") or "cli")
         config_path = self._hermes_home / "memory-router" / "config.json"
         self._config = load_config(config_path)
+        if self._config.compatibility.require_supported_contract:
+            require_strict_hermes_compatibility(self._hermes_home)
         self._router = build_router(
             config=self._config,
             hermes_home=self._hermes_home,
@@ -66,33 +78,34 @@ class HermesMemoryRouterProvider(MemoryProvider):
         if not self._config:
             return ""
         return (
-            "<memory_router>\n"
+            "Hermes Memory Router policy\n"
             f"Namespace: {self._config.namespace}\n"
             f"Environment: {self._config.environment}\n"
-            "Hindsight is the primary automatic backend. Mnemosyne stores "
-            "verified checkpoints and is used only as configured fallback.\n"
-            "Repository and runtime evidence override recalled memory.\n"
-            "Never store secrets, signed URLs, raw environment files, or "
-            "private customer data in memory.\n"
-            "</memory_router>"
+            f"Policy: {self._config.policy}\n"
+            "Hindsight is the only automatic memory authority. Mnemosyne, when "
+            "configured, receives verified checkpoints and is only a bounded fallback.\n"
+            "Never merge backend recall sets. Current repository and runtime evidence "
+            "override recalled memory. Never retain secrets, signed URLs, raw environment "
+            "files, or private customer data."
         )
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
+        """Return plain provider content; Hermes owns memory-context fencing."""
         if not self._router:
             return ""
         result = self._router.recall(query=query, limit=5)
         if not result.hits:
             return ""
         lines = [
-            "<memory_router_context>",
-            f"Backend: {result.backend}",
+            f"Memory backend: {result.backend}",
             f"Fallback used: {str(result.fallback_used).lower()}",
         ]
         if result.primary_error:
-            lines.append("Primary backend was unavailable; treat fallback as checkpoint-only context.")
+            lines.append(
+                "Primary backend was unavailable; the following is checkpoint-only fallback context."
+            )
         for index, hit in enumerate(result.hits, start=1):
             lines.append(f"{index}. {hit.content}")
-        lines.append("</memory_router_context>")
         return "\n".join(lines)
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
@@ -115,20 +128,31 @@ class HermesMemoryRouterProvider(MemoryProvider):
             agent_context=self._agent_context,
             metadata={
                 "platform": self._platform,
-                # Raw tool messages are deliberately excluded by default.
                 "tool_messages_included": False,
             },
         )
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
-        return list(TOOL_SCHEMAS)
+        if not self._config:
+            return []
+        return tool_schemas_for(self._config)
 
     def handle_tool_call(
         self, tool_name: str, args: dict[str, Any], **kwargs
     ) -> str:
-        if not self._router:
+        if not self._router or not self._config:
             return _json({"ok": False, "error": "Memory router is not initialized"})
+        allowed = {schema["name"] for schema in tool_schemas_for(self._config)}
+        if tool_name not in allowed:
+            return _json({"ok": False, "error": f"Tool is disabled by strict profile: {tool_name}"})
         try:
+            if tool_name == "memory_router_retain":
+                result = self._router.retain_memory(
+                    content=str(args.get("content", "")),
+                    context=str(args.get("context", "")),
+                    metadata=dict(args.get("metadata") or {}),
+                )
+                return _json({"ok": True, **result.to_dict()})
             if tool_name == "memory_router_checkpoint":
                 level = str(args.get("verification_level", ""))
                 if level not in VERIFICATION_LEVELS:
@@ -147,18 +171,29 @@ class HermesMemoryRouterProvider(MemoryProvider):
                 )
                 return _json({"ok": True, **result.to_dict()})
             if tool_name == "memory_router_reflect":
-                return _json({
-                    "ok": True,
-                    "result": self._router.reflect(query=str(args.get("query", ""))),
-                })
-            if tool_name == "memory_router_forget":
-                return _json({
-                    "ok": True,
-                    **self._router.forget(str(args.get("record_id", ""))),
-                })
-            if tool_name == "memory_router_retry":
-                record_id = str(args.get("record_id") or "") or None
-                return _json({"ok": True, "retried": self._router.retry(record_id)})
+                return _json(
+                    {
+                        "ok": True,
+                        "result": self._router.reflect(query=str(args.get("query", ""))),
+                    }
+                )
+            if tool_name == "memory_router_forget_plan":
+                return _json(
+                    {
+                        "ok": True,
+                        **self._router.plan_forget(str(args.get("record_id", ""))),
+                    }
+                )
+            if tool_name == "memory_router_forget_apply":
+                return _json(
+                    {
+                        "ok": True,
+                        **self._router.apply_forget(
+                            str(args.get("record_id", "")),
+                            str(args.get("confirmation_token", "")),
+                        ),
+                    }
+                )
             if tool_name == "memory_router_status":
                 return _json({"ok": True, **self._router.status()})
             return _json({"ok": False, "error": f"Unknown tool: {tool_name}"})
@@ -179,12 +214,11 @@ class HermesMemoryRouterProvider(MemoryProvider):
 
     def on_pre_compress(self, messages: list[dict[str, Any]]) -> str:
         return (
-            "Preserve verified memory-router checkpoint IDs, exact environment, "
-            "Git/deployment state, failed delivery state, and unresolved risks."
+            "Preserve verified checkpoint IDs, exact environment, Git/deployment state, "
+            "failed delivery state, and unresolved risks."
         )
 
     def on_session_end(self, messages: list[dict[str, Any]]) -> None:
-        # Normal turn writes are already queued. No full transcript duplication.
         return None
 
     def on_memory_write(
@@ -194,18 +228,6 @@ class HermesMemoryRouterProvider(MemoryProvider):
         content: str,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        # Built-in MEMORY.md writes are intentionally not mirrored automatically.
-        return None
-
-    def on_delegation(
-        self,
-        task: str,
-        result: str,
-        *,
-        child_session_id: str = "",
-        **kwargs,
-    ) -> None:
-        # Subagent outputs are not automatically retained to avoid memory poisoning.
         return None
 
     def shutdown(self) -> None:
@@ -214,9 +236,9 @@ class HermesMemoryRouterProvider(MemoryProvider):
             self._router = None
 
     def backup_paths(self) -> list[str]:
-        home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
-        # Hermes already backs up HERMES_HOME. Declare only explicit external
-        # Mnemosyne storage so it is not silently omitted.
+        home = self._hermes_home or Path(
+            os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")
+        )
         try:
             config = load_config(home / "memory-router" / "config.json")
             if config.mnemosyne.data_dir:
@@ -243,6 +265,7 @@ class HermesMemoryRouterProvider(MemoryProvider):
 
     def save_config(self, values: dict[str, Any], hermes_home: str) -> None:
         from .config import write_default_config
+
         home = Path(hermes_home).expanduser()
         write_default_config(
             home / "memory-router" / "config.json",

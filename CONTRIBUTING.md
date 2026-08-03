@@ -1,14 +1,20 @@
 # Contributing
 
-By contributing, you agree that your contribution is licensed under MIT.
+Thanks for taking the time to improve the project.
 
-1. Open an issue for material architectural changes.
-2. Fork and create a focused branch.
-3. Add tests for success and failure paths.
+By submitting a contribution, you agree to license it under the MIT License.
+
+## Before opening a pull request
+
+1. Open an issue first for changes to routing, storage, deletion, privacy, or
+   compatibility.
+2. Keep the branch focused on one problem.
+3. Add tests for the normal path and the failure path.
 4. Run `make check`.
-5. Update documentation and changelog.
-6. Open a pull request with security and compatibility impact.
+5. Update the relevant documentation and changelog.
+6. Explain the security, privacy, compatibility, and rollback impact in the pull
+   request.
 
-No contribution may weaken environment isolation, silently drop failed writes,
-store secrets in configuration, or enable equal automatic dual-provider routing
-without an accepted design proposal.
+A change will not be accepted if it silently drops writes, weakens environment
+isolation, stores secrets in normal configuration, or turns both providers into
+equal automatic memory backends without an approved design change.

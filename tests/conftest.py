@@ -6,6 +6,7 @@ import pytest
 
 from hermes_memory_router.adapters.base import MemoryBackend
 from hermes_memory_router.config import RouterConfig
+from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE
 from hermes_memory_router.models import BackendReceipt, MemoryHit
 from hermes_memory_router.router import MemoryRouter
 from hermes_memory_router.store import RouterStore
@@ -57,7 +58,12 @@ class FakeBackend(MemoryBackend):
 
 @pytest.fixture
 def config():
-    cfg = RouterConfig(namespace="project", environment="staging")
+    cfg = RouterConfig(
+        namespace="project",
+        environment="staging",
+        policy=HINDSIGHT_MNEMOSYNE,
+    )
+    cfg.apply_policy_defaults()
     cfg.hindsight.bank_id = "project-staging"
     cfg.mnemosyne.bank = "project-staging-checkpoints"
     cfg.routing.start_worker = False

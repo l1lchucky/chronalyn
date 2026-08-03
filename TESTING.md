@@ -1,40 +1,46 @@
-# Testing record
+# Testing
 
-## Deterministic suite
+The repository has two kinds of tests.
 
-Final artifact result: **62 tests passed** with **89.47% branch-aware deterministic-core coverage**. Python compilation, shell syntax, wheel build, and a clean-virtual-environment wheel smoke test also passed.
+## Local automated tests
 
+The normal test suite uses fake Hindsight and Mnemosyne adapters. That makes
+failure cases repeatable without needing network services.
 
-The repository's tests use fake backends to verify behavior without depending
-on network services:
+The suite covers:
 
-- primary/fallback recall routing;
-- automatic primary-only writes;
-- dual checkpoint delivery;
-- durable retry after failure;
-- mapped deletion and deletion retry;
-- idempotency under concurrency;
-- namespace isolation;
+- Hindsight-first recall and Mnemosyne fallback;
+- Hindsight-only automatic writes;
+- dual checkpoint writes;
+- retries, dead deliveries, and restart-safe outbox state;
+- logical IDs and coordinated deletion;
+- delete/write race handling;
+- profile, namespace, and environment binding;
 - secret redaction and rejection;
-- context exclusion;
-- Hindsight request construction;
-- provider failure behavior.
+- provider conflict detection;
+- guided setup and rollback;
+- terminal controls and Pac-Man animation behavior;
+- bootstrap download and permission checks;
+- package and plugin installation paths.
 
-## Live test limitations
+Run it with:
 
-The artifact-building environment did not provide installable Hindsight or
-Mnemosyne packages and did not run a Hermes gateway. Therefore no claim is made
-that live backend or plugin discovery testing was completed here.
+```bash
+python -m pip install -e '.[test]'
+make check
+```
 
-Production activation requires `scripts/live-smoke-test.sh` plus the isolation,
-backup, and failure-recovery tests documented in the repository.
+## Live checks
 
+Fake backends cannot prove that a particular Hermes, Hindsight, and Mnemosyne
+combination works on a real server. Before using the router in production, run
+the checklist in [docs/live-validation.md](docs/live-validation.md) on staging.
 
-## Quality-tool availability
+The live check covers installation, automatic retention, fallback, retry,
+delete behavior, environment isolation, and backup restoration.
 
-The artifact environment did not provide Ruff or mypy and its package mirror
-could not install them. They are therefore optional maintainer checks, not part
-of the claimed local validation. The required CI gate uses the checks completed
-here: compilation, shell parsing, tests with coverage, distribution build,
-clean-wheel installation, plugin-resource installation, and dependency
-consistency.
+## Optional maintainer checks
+
+Ruff, mypy, and `pip-audit` are available through the `quality` and `dev`
+extras. They are useful release checks but are not required to run the basic
+test suite.

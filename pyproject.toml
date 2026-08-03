@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-memory-router"
-version = "0.1.0a1"
-description = "Policy-based Hindsight primary and Mnemosyne checkpoint routing for Hermes Agent"
+version = "0.2.0b1"
+description = "A careful Hindsight and Mnemosyne memory policy for Hermes Agent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -15,9 +15,9 @@ authors = [
 maintainers = [
   {name = "Chucky"}
 ]
-keywords = ["hermes-agent", "memory", "hindsight", "mnemosyne", "ai-agents"]
+keywords = ["hermes-agent", "memory", "hindsight", "mnemosyne", "agent-memory"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
@@ -25,11 +25,12 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = [
-  "mnemosyne-memory>=3.15,<4",
-]
+dependencies = []
 
 [project.optional-dependencies]
+mnemosyne = [
+  "mnemosyne-memory>=3.15,<4",
+]
 test = [
   "build>=1.2",
   "coverage[toml]>=7.6",
@@ -79,6 +80,9 @@ omit = [
   "src/hermes_memory_router/factory.py",
   "src/hermes_memory_router/provider.py",
   "src/hermes_memory_router/adapters/mnemosyne.py",
+  "src/hermes_memory_router/bootstrap.py",
+  "src/hermes_memory_router/setup_tui.py",
+  "src/hermes_memory_router/operations.py",
 ]
 
 [tool.coverage.report]

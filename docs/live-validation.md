@@ -1,62 +1,58 @@
-# Live validation matrix
+# Live validation
 
-The deterministic suite cannot prove behavior of a live Hermes process,
-Hindsight deployment, or installed Mnemosyne runtime. Complete this matrix on a
-non-production server before production activation.
+The local tests use fake backends. Complete this checklist on a staging host
+before production use.
 
-## 1. Install and discovery
+## 1. Install and discover the plugin
 
 ```bash
-python -m pip install ./hermes_memory_router-0.1.0a1-py3-none-any.whl
+python -m pip install ./hermes_memory_router-0.2.0b1-py3-none-any.whl
 hermes-memory-router install-plugin
-hermes-memory-router init --namespace test-project --environment staging
-hermes config set memory.provider hermes_memory_router
+hermes-memory-router setup-dual
 hermes memory status
 ```
 
-Pass condition: Hermes reports the router as active and exposes only the
-`memory_router_*` tools.
+Pass: Hermes reports `hermes_memory_router` as the only external memory provider
+and exposes only the expected router tools.
 
-## 2. Backend health
+## 2. Check backend health
 
 ```bash
 hermes-memory-router validate
 hermes-memory-router status
 ```
 
-Pass condition: Hindsight and Mnemosyne both report healthy, and the SQLite
-control plane reports no failed or dead deliveries.
+Pass: the configured backends are healthy and no delivery is failed or dead.
 
-## 3. Primary recall and automatic retention
+## 3. Check automatic Hindsight retention
 
-Create a unique non-sensitive marker in a normal primary Hermes turn. Complete
-the turn, drain the outbox, start a new session, and recall the marker.
+Use a unique harmless marker in a normal Hermes conversation. Finish the turn,
+drain the outbox, start a new session, and recall the marker.
 
-Pass condition: the turn is present in Hindsight and absent from the Mnemosyne
-checkpoint bank.
+Pass: Hindsight recalls it and the Mnemosyne checkpoint bank does not contain it.
 
-## 4. Verified checkpoint dual write
+## 4. Check dual checkpoint delivery
 
-Use `memory_router_checkpoint` with a unique marker and evidence.
+Create a verified checkpoint with a different marker.
 
-Pass condition:
+Pass:
 
 ```text
 hindsight:retain = complete
 mnemosyne:retain = complete
 ```
 
-Then search for the marker through `memory_router_recall`.
+Recall the marker through the router.
 
-## 5. Fallback
+## 5. Check fallback
 
-Temporarily make Hindsight unreachable without deleting data. Recall the
+Temporarily make Hindsight unreachable without deleting its data. Recall the
 checkpoint marker.
 
-Pass condition: Mnemosyne returns checkpoint-only context, the response states
-that fallback was used, and the result respects `fallback_max_chars`.
+Pass: Mnemosyne returns checkpoint-only context, fallback is reported, and the
+result stays inside `fallback_max_chars`.
 
-## 6. Retry
+## 6. Check retry
 
 Make one backend unavailable, create a checkpoint, restore the backend, then run:
 
@@ -65,66 +61,60 @@ hermes-memory-router retry
 hermes-memory-router drain --limit 100
 ```
 
-Pass condition: the failed delivery becomes complete without creating duplicate
-backend records.
+Pass: the failed delivery completes without a duplicate record.
 
-## 7. Deletion
+## 7. Check deletion
 
-Call `memory_router_forget` for the test checkpoint and drain the outbox.
+Delete the test checkpoint through the administrative CLI or the enabled
+two-step tool flow.
 
-Pass condition:
+Pass:
 
 ```text
 hindsight:delete = complete
 mnemosyne:delete = complete
 ```
 
-Neither backend may recall the marker afterward.
+Neither backend recalls the marker afterward.
 
-## 8. Forget/write race
+## 8. Check the write/delete race
 
-Pause one backend while a checkpoint retain is processing, request forget, then
-allow the retain to finish.
+Pause one backend while a checkpoint write is processing, request deletion, then
+allow the write to finish.
 
-Pass condition: the router automatically schedules deletion and the memory does
-not survive.
+Pass: a delete is scheduled from the late receipt and the memory does not remain.
 
-## 9. Context exclusion
+## 9. Check excluded contexts
 
-Generate activity through cron, flush, and subagent contexts.
+Generate cron, flush, and subagent activity.
 
-Pass condition: none is automatically retained unless explicitly checkpointed.
+Pass: it is not automatically retained unless explicitly checkpointed.
 
-## 10. Secret policy
+## 10. Check secret handling
 
-In a disposable isolated test bank, attempt a checkpoint containing a fake API
-key.
+Use a fake credential in a disposable test bank.
 
-Pass condition:
+Pass:
 
-- `redaction.mode=redact`: the fake secret is replaced;
-- `redaction.mode=reject`: the write is rejected;
-- no raw secret appears in router, Hindsight, Mnemosyne, or logs.
+- redact mode replaces it;
+- reject mode blocks it;
+- the original fake value does not appear in router, Hindsight, Mnemosyne, or
+  logs.
 
 Never use a real credential for this test.
 
-## 11. Environment isolation
+## 11. Check staging and production isolation
 
-Use unique markers:
+Use different random markers in each environment.
 
-```text
-STAGING-ONLY-<random>
-PRODUCTION-ONLY-<random>
-```
+Pass: each environment recalls only its own marker. Any crossover is a critical
+failure. Disable the provider and inspect profile paths, bank IDs, credentials,
+and restored databases.
 
-Pass condition: each environment recalls only its own marker. Any cross-recall is
-a critical failure; disable the provider immediately and inspect bank IDs,
-configuration paths, and restored databases.
+## 12. Check backup restoration
 
-## 12. Backup and restore
+Restore the router database, Mnemosyne data, and Hindsight data into a disposable
+host with matching identity settings.
 
-Back up the router DB, Mnemosyne data, and Hindsight database. Restore them into
-a disposable environment with identical namespace and bank configuration.
-
-Pass condition: checkpoints, backend mappings, and delivery states remain
-consistent, and no staging data appears in a production restore.
+Pass: checkpoint IDs, backend mappings, delivery states, and recall remain
+consistent.

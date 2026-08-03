@@ -1,6 +1,6 @@
 # Failure recovery
 
-## Inspect
+## Start with status
 
 ```bash
 hermes-memory-router validate
@@ -8,32 +8,45 @@ hermes-memory-router status
 journalctl --user -u hermes-gateway.service -n 200 --no-pager
 ```
 
-The status output separates backend health from durable delivery state.
+`status` separates backend health from queued delivery state.
 
-## Retry failed deliveries
+## Retry failed work
+
+Retry everything marked failed or dead:
 
 ```bash
 hermes-memory-router retry
 hermes-memory-router drain --limit 500
 ```
 
-Or retry one router record:
+Retry one logical record:
 
 ```bash
 hermes-memory-router retry --record-id mr_...
 ```
 
-## Hindsight unavailable
+## Hindsight is down
 
-Automatic writes remain in SQLite. Recall may use Mnemosyne checkpoints when
-configured. Restore Hindsight, then drain the outbox.
+New automatic writes stay in SQLite. Dual-mode recall may fall back to
+Mnemosyne checkpoints when configured. Restore Hindsight, then drain the outbox.
 
-## Mnemosyne unavailable
+## Mnemosyne is down
 
-Normal Hindsight memory continues. Checkpoints remain pending for Mnemosyne.
-Repair the Python package or SQLite path, then retry.
+Normal Hindsight memory continues. Dual-mode checkpoints remain pending for
+Mnemosyne. Repair the package or data path, then retry.
 
-## Router database recovery
+## A record was forgotten while a write was pending
+
+Pending writes are cancelled. If a write was already processing and finishes
+late, its receipt creates a delete job automatically.
+
+## A delete is incomplete
+
+A record is fully deleted only when every backend delete is complete. Repair the
+failed backend and retry the record. Keep the audit history until both sides are
+confirmed.
+
+## Restore the router database
 
 Stop Hermes first:
 
@@ -41,40 +54,28 @@ Stop Hermes first:
 systemctl --user stop hermes-gateway.service
 ```
 
-Back up the damaged files, restore `router.db` together with its WAL/SHM files
-when present, run `PRAGMA integrity_check`, then restart. Never restore a staging
-database into production.
+Restore `router.db` together with its WAL and SHM files when they exist. Run a
+SQLite integrity check before restarting. Never restore a staging router database
+into production.
 
-## Partial deletion
-
-A record is fully deleted only when every `backend:delete` delivery is complete.
-Repair the failed backend and retry. Preserve the audit trail until confirmed.
-
-## Rollback to direct Hindsight
+## Return to direct Hindsight
 
 ```bash
-hermes memory off
 hermes config set memory.provider hindsight
 systemctl --user restart hermes-gateway.service
 ```
 
-The router and Mnemosyne data remain untouched for later recovery.
+Keep the router database and Mnemosyne bank while investigating. Disabling the
+router should not destroy recovery evidence.
 
-## Backup set
+## Back up together
 
-Back up:
+A complete recovery set includes:
 
-- `$HERMES_HOME/memory-router/`
-- Mnemosyne data directory
-- Hindsight database according to its deployment documentation
-- non-secret configuration files
+- `$HERMES_HOME/memory-router/`;
+- Mnemosyne data;
+- Hindsight data and configuration;
+- the Hermes profile configuration;
+- the secret store used by the profile.
 
-Encrypt backups and test restoration.
-
-
-## Forgotten records with pending writes
-
-Forget cancels pending, failed, and dead retain deliveries. If a retain was
-already processing and completes concurrently, the control plane automatically
-creates a delete delivery from its receipt. A forgotten record therefore cannot
-be resurrected by a later retry.
+Encrypt backups and test a restore on a disposable host.

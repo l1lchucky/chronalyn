@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
@@ -9,7 +8,8 @@ from typing import Any
 from .adapters.base import MemoryBackend
 from .config import RouterConfig
 from .models import CheckpointResult, RecallResult
-from .redaction import sanitize
+from .policy import get_policy
+from .redaction import sanitize, sanitize_metadata
 from .store import RouterStore
 
 logger = logging.getLogger(__name__)
@@ -22,16 +22,16 @@ class MemoryRouter:
         config: RouterConfig,
         store: RouterStore,
         primary: MemoryBackend,
-        checkpoint: MemoryBackend,
+        checkpoint: MemoryBackend | None = None,
     ) -> None:
         self.config = config
+        self.policy = get_policy(config.policy)
         self.store = store
-        self.backends = {
-            primary.name: primary,
-            checkpoint.name: checkpoint,
-        }
         self.primary = primary
         self.checkpoint = checkpoint
+        self.backends = {primary.name: primary}
+        if checkpoint is not None:
+            self.backends[checkpoint.name] = checkpoint
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._worker: threading.Thread | None = None
@@ -48,6 +48,14 @@ class MemoryRouter:
         )
         self._worker.start()
 
+    def _safe_error(self, exc: Exception) -> str:
+        # Error payloads from remote services can echo request fields. Always
+        # redact them even when the configured write policy is strict reject.
+        from dataclasses import replace
+
+        safe_config = replace(self.config.redaction, mode="redact")
+        return sanitize(str(exc), safe_config).text[:4000]
+
     def _worker_loop(self) -> None:
         while not self._stop.is_set():
             try:
@@ -55,10 +63,60 @@ class MemoryRouter:
             except Exception:
                 logger.exception("Memory router outbox cycle failed")
                 processed = 0
-            self._wake.wait(
-                0.05 if processed else self.config.routing.worker_poll_seconds
-            )
+            self._wake.wait(0.05 if processed else self.config.routing.worker_poll_seconds)
             self._wake.clear()
+
+    def _record(
+        self,
+        *,
+        kind: str,
+        content: str,
+        metadata: dict[str, Any],
+        backends: list[str],
+    ) -> CheckpointResult:
+        record_id, duplicate = self.store.create_record(
+            namespace=self.config.namespace,
+            environment=self.config.environment,
+            kind=kind,
+            content=content,
+            metadata=metadata,
+            backends=backends,
+        )
+        self._wake.set()
+        return CheckpointResult(
+            record_id=record_id,
+            duplicate=duplicate,
+            delivery_states=self.store.delivery_states(record_id),
+        )
+
+    def retain_memory(
+        self,
+        *,
+        content: str,
+        context: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> CheckpointResult:
+        clean = sanitize(content, self.config.redaction)
+        clean_context = sanitize(context, self.config.redaction)
+        body = clean.text
+        if clean_context.text:
+            body = f"[CONTEXT]\n{clean_context.text}\n[MEMORY]\n{clean.text}"
+        clean_metadata = sanitize_metadata(metadata or {}, self.config.redaction)
+        meta = {
+            **dict(clean_metadata.value),
+            "redaction_findings": sorted(
+                set(clean.findings + clean_context.findings + clean_metadata.findings)
+            ),
+            "truncated": (
+                clean.truncated or clean_context.truncated or clean_metadata.truncated
+            ),
+        }
+        return self._record(
+            kind="explicit",
+            content=body,
+            metadata=meta,
+            backends=[self.primary.name],
+        )
 
     def _format_checkpoint(
         self,
@@ -70,14 +128,25 @@ class MemoryRouter:
     ) -> tuple[str, dict[str, Any]]:
         clean_content = sanitize(content, self.config.redaction)
         clean_evidence = sanitize(evidence, self.config.redaction)
-        clean_metadata = dict(metadata)
-        clean_metadata.update({
-            "verification_level": verification_level,
-            "redaction_findings": sorted(
-                set(clean_content.findings + clean_evidence.findings)
-            ),
-            "truncated": clean_content.truncated or clean_evidence.truncated,
-        })
+        metadata_result = sanitize_metadata(metadata, self.config.redaction)
+        clean_metadata = dict(metadata_result.value)
+        clean_metadata.update(
+            {
+                "verification_level": verification_level,
+                "redaction_findings": sorted(
+                    set(
+                        clean_content.findings
+                        + clean_evidence.findings
+                        + metadata_result.findings
+                    )
+                ),
+                "truncated": (
+                    clean_content.truncated
+                    or clean_evidence.truncated
+                    or metadata_result.truncated
+                ),
+            }
+        )
         body = (
             "[VERIFIED MEMORY CHECKPOINT]\n"
             f"Namespace: {self.config.namespace}\n"
@@ -104,19 +173,14 @@ class MemoryRouter:
             evidence=evidence,
             metadata=metadata or {},
         )
-        record_id, duplicate = self.store.create_record(
-            namespace=self.config.namespace,
-            environment=self.config.environment,
+        backends = [
+            name for name in self.policy.checkpoint_backends if name in self.backends
+        ]
+        return self._record(
             kind="checkpoint",
             content=body,
             metadata=meta,
-            backends=[self.primary.name, self.checkpoint.name],
-        )
-        self._wake.set()
-        return CheckpointResult(
-            record_id=record_id,
-            duplicate=duplicate,
-            delivery_states=self.store.delivery_states(record_id),
+            backends=backends,
         )
 
     def retain_turn(
@@ -133,23 +197,25 @@ class MemoryRouter:
         user = sanitize(user_content, self.config.redaction)
         assistant = sanitize(assistant_content, self.config.redaction)
         content = f"[USER]\n{user.text}\n[ASSISTANT]\n{assistant.text}"
+        metadata_result = sanitize_metadata(metadata or {}, self.config.redaction)
         meta = {
-            **(metadata or {}),
+            **dict(metadata_result.value),
             "session_id": session_id,
             "agent_context": agent_context,
-            "redaction_findings": sorted(set(user.findings + assistant.findings)),
-            "truncated": user.truncated or assistant.truncated,
+            "redaction_findings": sorted(
+                set(user.findings + assistant.findings + metadata_result.findings)
+            ),
+            "truncated": (
+                user.truncated or assistant.truncated or metadata_result.truncated
+            ),
         }
-        record_id, _duplicate = self.store.create_record(
-            namespace=self.config.namespace,
-            environment=self.config.environment,
+        result = self._record(
             kind="turn",
             content=content,
             metadata=meta,
             backends=[self.primary.name],
         )
-        self._wake.set()
-        return record_id
+        return result.record_id
 
     def recall(self, *, query: str, limit: int = 5) -> RecallResult:
         primary_error: str | None = None
@@ -161,6 +227,14 @@ class MemoryRouter:
             primary_error = str(exc)
             if not self.config.routing.fallback_on_error:
                 raise
+
+        if self.checkpoint is None:
+            return RecallResult(
+                hits=[],
+                backend=self.primary.name,
+                fallback_used=False,
+                primary_error=primary_error,
+            )
 
         hits = self.checkpoint.recall(
             query=query,
@@ -193,13 +267,43 @@ class MemoryRouter:
     def reflect(self, *, query: str) -> dict[str, Any]:
         return self.primary.reflect(query=query)
 
-    def forget(self, record_id: str) -> dict[str, Any]:
+    def plan_forget(self, record_id: str, *, ttl_seconds: int = 300) -> dict[str, Any]:
+        record = self.store.record(record_id)
+        if not record:
+            raise KeyError(record_id)
+        token = self.store.create_deletion_plan(record_id, ttl_seconds=ttl_seconds)
+        return {
+            "record_id": record_id,
+            "kind": record["kind"],
+            "backends": sorted(
+                key.split(":", 1)[0]
+                for key, state in self.store.delivery_states(record_id).items()
+                if key.endswith(":retain") and state == "complete"
+            ),
+            "confirmation_token": token,
+            "expires_in_seconds": ttl_seconds,
+        }
+
+    def apply_forget(self, record_id: str, confirmation_token: str) -> dict[str, Any]:
+        self.store.apply_deletion_plan(record_id, confirmation_token)
+        self._wake.set()
+        return {
+            "record_id": record_id,
+            "delivery_states": self.store.delivery_states(record_id),
+        }
+
+    def forget_cli(self, record_id: str) -> dict[str, Any]:
+        """Administrative CLI deletion after explicit --yes confirmation."""
         self.store.schedule_delete(record_id)
         self._wake.set()
         return {
             "record_id": record_id,
             "delivery_states": self.store.delivery_states(record_id),
         }
+
+    def forget(self, record_id: str) -> dict[str, Any]:
+        """Backward-compatible library alias; not exposed through Hermes tools."""
+        return self.forget_cli(record_id)
 
     def retry(self, record_id: str | None = None) -> int:
         count = self.store.retry_failed(record_id)
@@ -217,7 +321,7 @@ class MemoryRouter:
             processed += 1
             backend = self.backends.get(str(delivery["backend"]))
             if backend is None:
-                self._fail_delivery(delivery, RuntimeError("Unknown backend"))
+                self._fail_delivery(delivery, RuntimeError("Unknown or disabled backend"))
                 continue
             try:
                 if delivery["operation"] == "retain":
@@ -255,7 +359,7 @@ class MemoryRouter:
             self.config.routing.retry_base_seconds * (2 ** min(attempts - 1, 12)),
         )
         next_attempt = time.time() + delay
-        error = str(exc)
+        error = self._safe_error(exc)
         dead = bool(max_attempts and attempts >= max_attempts)
         if dead:
             next_attempt = 0
@@ -271,22 +375,27 @@ class MemoryRouter:
             delivery["record_id"],
             delivery["backend"],
             delivery["operation"],
-            exc,
+            error,
         )
 
     def status(self) -> dict[str, Any]:
         return {
             "namespace": self.config.namespace,
             "environment": self.config.environment,
+            "policy": self.config.policy,
             "routing": {
                 "automatic_write": "hindsight-only",
-                "checkpoint_write": "hindsight+mnemosyne",
-                "recall": "hindsight-first, mnemosyne fallback",
+                "checkpoint_write": list(self.policy.checkpoint_backends),
+                "recall": (
+                    "hindsight-first, mnemosyne checkpoint fallback"
+                    if self.checkpoint is not None
+                    else "hindsight-only"
+                ),
+                "merged_results": False,
             },
             "store": self.store.stats(),
             "backends": {
-                name: backend.health()
-                for name, backend in self.backends.items()
+                name: backend.health() for name, backend in self.backends.items()
             },
             "worker_alive": bool(self._worker and self._worker.is_alive()),
         }
@@ -296,7 +405,6 @@ class MemoryRouter:
         self._wake.set()
         if self._worker and self._worker.is_alive():
             self._worker.join(timeout=10)
-        # Final best-effort flush.
         try:
             for _ in range(5):
                 if not self.drain_outbox():

@@ -1,4 +1,4 @@
-.PHONY: install test compile shell build check quality audit
+.PHONY: install test compile shell hygiene build check quality audit
 
 install:
 	python -m pip install -e ".[test]"
@@ -10,12 +10,12 @@ compile:
 	python -m compileall -q src tests __init__.py
 
 shell:
-	bash -n scripts/install.sh scripts/uninstall.sh scripts/live-smoke-test.sh
+	bash -n scripts/install.sh scripts/install-dual.sh scripts/uninstall.sh scripts/live-smoke-test.sh
 
 build:
 	python -m build
 
-check: compile shell test build
+check: compile shell hygiene test build
 
 quality:
 	ruff check .

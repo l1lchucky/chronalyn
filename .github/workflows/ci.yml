@@ -25,14 +25,15 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[test]"
       - run: python -m compileall -q src tests __init__.py
-      - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/live-smoke-test.sh
+      - run: bash -n scripts/install.sh scripts/install-dual.sh scripts/uninstall.sh scripts/live-smoke-test.sh
+      - run: python scripts/check-release-tree.py
       - run: pytest --cov --cov-report=term-missing
       - run: python -m build
       - name: Smoke-test built wheel
         shell: bash
         run: |
           python -m venv /tmp/hmr-wheel-test
-          /tmp/hmr-wheel-test/bin/pip install --no-deps dist/*.whl
+          /tmp/hmr-wheel-test/bin/pip install dist/*.whl
           /tmp/hmr-wheel-test/bin/hermes-memory-router \
             --hermes-home /tmp/hmr-home \
             init --namespace ci-project --environment staging

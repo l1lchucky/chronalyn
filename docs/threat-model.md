@@ -1,103 +1,111 @@
 # Threat model
 
+This document describes the problems the router is designed to reduce. It does
+not claim to protect a machine after the operating system or Python runtime has
+been compromised.
+
 ## Assets
 
-- User and project memories
-- Hindsight API credentials
-- Mnemosyne SQLite data
-- Router mapping/outbox database
-- Environment isolation boundaries
-- Audit and deletion state
+- memory content;
+- Hindsight credentials;
+- Mnemosyne data;
+- the router database and audit trail;
+- staging and production boundaries;
+- backup copies.
 
 ## Trust boundaries
 
-1. Hermes process to router provider
-2. Router to Hindsight over HTTP(S)
-3. Router to local Mnemosyne Python package
-4. Router and Mnemosyne SQLite files
-5. Operators editing configuration and restoring backups
+1. Hermes calls the router plugin.
+2. The router calls Hindsight over HTTP or HTTPS.
+3. The router calls the installed Mnemosyne Python package.
+4. SQLite files are read and written on the host.
+5. Operators edit configuration and restore backups.
 
-## Threats and controls
+## Main risks
 
-### Secret exfiltration
+### Secrets stored as memory
 
-Threat: credentials appear in prompts, tool output, signed URLs, or environment
-files and are retained.
-
-Controls:
-
-- built-in credential, JWT, private-key, DSN, signed-URL, and entropy detection;
-- configurable redact or reject mode;
-- raw tool messages excluded;
-- no secret values stored in JSON configuration;
-- production example defaults to rejection.
-
-Residual risk: pattern detection is not perfect. Operators must still avoid
-feeding secrets to memory tools.
-
-### Prompt or memory poisoning
-
-Threat: untrusted tool, subagent, cron, or imported content becomes authoritative.
+A prompt, command result, or signed URL may contain a credential.
 
 Controls:
 
-- only primary context is automatically retained;
-- checkpoints require verification level and evidence;
-- Mnemosyne writes use external-write trust classification when supported;
-- system prompt states that runtime evidence overrides memory.
+- common secret patterns are redacted or rejected;
+- raw tool messages are off;
+- configuration contains environment-variable names, not secret values;
+- production examples use reject mode.
 
-### Cross-environment leakage
+Remaining risk: no pattern list catches every secret.
 
-Threat: production recalls staging facts.
+### Memory poisoning
 
-Controls:
-
-- distinct bank names;
-- profile-scoped configuration;
-- separate router databases;
-- validated namespace/environment identifiers;
-- deployment guidance recommends physically separate servers;
-- isolation smoke tests use unique markers.
-
-### Backend compromise
-
-Threat: a remote Hindsight service reads or alters memory.
+Untrusted content may be saved as if it were a confirmed fact.
 
 Controls:
 
-- TLS verification on by default;
-- API key supplied through environment;
-- local Hindsight recommended for sensitive deployments;
-- backend responses are context, never operational authority.
+- subagent, cron, and flush output is not written automatically;
+- checkpoints require a verification level and evidence;
+- direct runtime evidence outranks recalled memory;
+- the model cannot change routing policy during a conversation.
 
-### Availability failure
-
-Threat: one backend is unavailable.
+### Staging data appearing in production
 
 Controls:
 
-- durable outbox;
-- exponential retries;
-- bounded fallback;
-- agent continues without blocking on writes;
-- status exposes backend and delivery health.
+- distinct bank names and credentials;
+- profile, namespace, and environment binding in the router database;
+- separate server deployments are recommended for strong isolation;
+- live validation includes unique cross-environment markers.
 
-### Data deletion inconsistency
+Any cross-environment recall is a critical failure. Disable the provider and
+inspect configuration and restored databases before continuing.
 
-Threat: one backend deletes while another does not.
+### Remote-service compromise or interception
 
 Controls:
 
-- per-backend delete deliveries;
-- mapped external identifiers;
-- retryable failures;
-- audit trail;
-- no claim of global deletion until all deliveries complete.
+- TLS verification is on by default;
+- API keys come from environment storage;
+- remote endpoints require explicit consent;
+- local Hindsight is recommended for sensitive workloads.
 
-## Out of scope
+A backend response is memory context, not permission to deploy, delete data, or
+change infrastructure.
 
-- Compromise of the host operating system or Python interpreter
-- Malicious dependency code with host-level access
-- Cryptographic backup tooling
-- Hindsight or Mnemosyne internal correctness
-- Legal classification of retained data
+### Backend outage
+
+Controls:
+
+- writes enter a durable local outbox first;
+- retries use backoff;
+- failed operations remain visible;
+- Mnemosyne fallback is bounded and optional;
+- a slow backend does not block `sync_turn()`.
+
+### Incomplete deletion
+
+Controls:
+
+- each backend has its own delete delivery;
+- backend IDs are saved from successful writes;
+- failed deletes are retryable;
+- a write/delete race schedules a follow-up delete.
+
+### Installer supply-chain risk
+
+Controls:
+
+- HTTPS-only downloads;
+- release checksums;
+- optional GitHub attestation verification;
+- no direct `curl | bash` path in the documentation;
+- no hidden `sudo` call in the router bootstrap;
+- downloaded sources and logs are shown to the user.
+
+## Outside this threat model
+
+- a compromised host or Python interpreter;
+- malicious code in an installed dependency;
+- physical access to an unlocked machine;
+- backup encryption tooling;
+- bugs inside Hindsight or Mnemosyne;
+- legal classification of stored data.

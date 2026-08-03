@@ -1,43 +1,52 @@
 # Privacy
 
-Hermes Memory Router is self-hosted software and does not operate a hosted
-service. The project maintainers do not receive memory content.
+Hermes Memory Router is self-hosted software. The project maintainer does not
+receive your memories, configuration, or usage data.
 
-## Data stored locally
+## What the router stores
 
-The router database stores:
+The local router database contains:
 
-- sanitized record content;
+- sanitized memory content;
 - namespace and environment;
-- record kind and metadata;
-- backend external identifiers;
-- delivery state, attempts, errors, and receipts;
-- audit events.
+- record type and metadata;
+- backend IDs and delivery receipts;
+- retry state and errors;
+- audit events for router operations.
 
-Mnemosyne stores checkpoint content in its configured SQLite bank.
+Mnemosyne stores checkpoint content in its configured local bank.
 
-## Data sent remotely
+## What may leave the machine
 
-When Hindsight uses a remote API, sanitized automatic turns and checkpoints are
-sent to that API. Hindsight may use a configured language-model provider during
-extraction or reflection. Review the Hindsight deployment's privacy terms and
-model-provider configuration.
+When Hindsight points to a remote service, sanitized normal turns and
+checkpoints are sent to that endpoint. A self-hosted Hindsight installation may
+also send content to the language-model provider it uses for extraction or
+reflection.
 
-## Minimization defaults
+The setup shows the selected endpoint before activation. Cloud use requires a
+separate acknowledgement. Raw tool messages are off by default.
 
-- normal turns are not copied to Mnemosyne;
-- raw tool messages are excluded;
-- subagent and scheduled contexts are excluded;
-- fallback injection is character-bounded;
-- only router-managed records can be deleted through router tools.
+## Data minimization
 
-## Operator responsibilities
+The default policy keeps the amount of copied data small:
 
-Operators are data controllers for their deployment. They must define retention,
-backup, deletion, user-consent, and access-control policies appropriate to their
-jurisdiction and data.
+- normal turns are sent only to Hindsight;
+- Mnemosyne receives verified checkpoints, not full conversations;
+- fallback context is bounded;
+- subagent, cron, and flush contexts are not automatically stored;
+- telemetry and automatic update checks are not included.
 
-## Telemetry
+## Redaction
 
-This project contains no telemetry, analytics, crash reporting, or automatic
-network update check.
+Redaction catches common API keys, authorization headers, private keys, database
+passwords, signed URLs, JWTs, and high-entropy tokens. Production can use reject
+mode so a suspected secret stops the write instead of being replaced.
+
+Pattern matching is a safety net, not a guarantee. Do not intentionally place
+credentials or private customer data in memory.
+
+## Operator responsibility
+
+The person running the software decides retention, access, backups, deletion,
+and consent. Check the privacy terms of every remote Hindsight or model service
+you configure.

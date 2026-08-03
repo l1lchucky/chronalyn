@@ -1,39 +1,60 @@
 # Routing policies
 
-The initial release intentionally supports one safe policy set.
+The router ships with two policies. Both keep Hindsight as the automatic memory
+system.
 
-## Automatic writes: `primary_only`
+## Hindsight only
 
-Normal completed turns go only to Hindsight. Mnemosyne is not a second raw
-conversation archive.
+Use this when you want the router's outbox, redaction, logical IDs, and upgrade
+path without adding Mnemosyne.
 
-## Checkpoints: `primary_and_checkpoint`
+```text
+Normal turn     -> Hindsight
+Explicit retain -> Hindsight
+Checkpoint      -> Hindsight
+Recall          -> Hindsight
+Reflect         -> Hindsight
+Fallback        -> off
+```
 
-A checkpoint is written to Hindsight and Mnemosyne. It must contain a declared
-verification level and evidence.
+## Hindsight with Mnemosyne checkpoints
 
-## Recall: `primary_then_fallback`
+Use this when important milestones need a second local record.
 
-Hindsight remains authoritative for automatic recall. Mnemosyne is a fallback
-only when:
+```text
+Normal turn     -> Hindsight
+Explicit retain -> Hindsight
+Checkpoint      -> Hindsight and Mnemosyne
+Recall          -> Hindsight first
+Fallback        -> Mnemosyne checkpoints only
+Reflect         -> Hindsight
+Merged recall   -> off
+```
 
-- Hindsight returns no hits and `fallback_on_empty` is true; or
-- Hindsight fails and `fallback_on_error` is true.
+A checkpoint includes a verification level and evidence. Typical checkpoints are
+releases, migrations, incident conclusions, rollback points, and tested project
+milestones.
 
-## Context restrictions
+## Context rules
 
-Only `primary` agent context is written automatically by default. Subagent,
-cron, and flush contexts are excluded because their system prompts and
-intermediate outputs can pollute durable memory.
+Only the primary Hermes context is written automatically. Cron output, flush
+work, and subagent results are ignored unless a person or the main agent creates
+an explicit checkpoint.
 
-## Deletion
+Raw tool messages are not retained by default because they can contain file
+paths, command output, signed URLs, or secrets.
 
-`memory_router_forget` deletes only router-managed records. It schedules a
-backend deletion for every completed retain delivery. A failed deletion stays
-in the outbox until retried.
+## Delete rules
 
-## Why equal multi-provider routing is not supported
+Each router record has one logical ID and one delivery per backend. A delete is
+complete only after every backend that accepted the record confirms deletion.
 
-Equal automatic providers create duplicated memories, conflicting ranking,
-larger prompts, more tool schemas, double extraction cost, and unclear deletion
-semantics. This project offers explicit asymmetric policy instead.
+If a write and delete happen at the same time, the successful write receipt is
+used to schedule a follow-up delete. A late write should not bring a forgotten
+record back.
+
+## Why the policies are fixed
+
+The model does not invent routing rules during a conversation. Policy changes
+are operator actions because they change where data is stored and how recall
+works.

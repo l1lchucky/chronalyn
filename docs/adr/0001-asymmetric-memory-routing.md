@@ -5,39 +5,42 @@
 
 ## Context
 
-Hermes deliberately activates one external memory provider. Running multiple
-equal providers would duplicate tool schemas, prompt context, extraction work,
-and deletion state.
+Hermes currently treats external memory as a single-provider choice. Running two
+independent providers equally would duplicate tool schemas, recalled context,
+normal-turn writes, and delete state.
 
 ## Decision
 
-Expose one composite Hermes provider:
+Ship one Hermes provider with fixed internal roles:
 
-- Hindsight owns automatic turn retention, primary recall, and reflection.
-- Mnemosyne owns verified checkpoint storage and bounded fallback.
-- A local SQLite control plane owns logical IDs, idempotency, retries, deletion
-  mapping, and audit events.
+- Hindsight owns automatic retention, primary recall, and reflection.
+- Mnemosyne stores verified checkpoints and optional fallback context.
+- SQLite owns logical IDs, idempotency, retry state, backend mappings, and audit
+  events.
 
-## Consequences
+## Benefits
 
-Benefits:
+- one clear automatic memory authority;
+- no normal-turn duplication;
+- small model-facing tool list;
+- failed checkpoint writes survive restarts;
+- one logical record can be deleted from both backends;
+- the router remains compatible with Hermes' single-provider model.
 
-- one authoritative automatic backend;
-- no duplicate normal-turn writes;
-- deterministic fallback;
-- recoverable partial failure;
-- backend-independent logical record IDs.
+## Costs
 
-Costs:
+- one additional SQLite database;
+- adapter maintenance when upstream APIs change;
+- checkpoint copies are eventually consistent rather than atomic;
+- every supported release combination needs live testing.
 
-- another SQLite database;
-- custom adapter maintenance;
-- eventual consistency between checkpoint backends;
-- live compatibility testing after backend upgrades.
+## Alternatives considered
 
-## Rejected alternatives
+- expose both providers directly and let the model choose;
+- merge both recall result sets on every turn;
+- write every normal turn to both backends;
+- import Hermes' bundled Hindsight provider implementation;
+- use Mnemosyne as the automatic primary backend.
 
-- Equal automatic fan-out to every provider.
-- Automatic merging of both recall result sets.
-- Mnemosyne-only or Hindsight-only checkpoint handling.
-- Importing Hermes' private bundled Hindsight provider implementation.
+These alternatives either weaken compatibility, increase prompt/tool size, or
+make failure and deletion behavior harder to reason about.

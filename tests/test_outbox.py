@@ -158,3 +158,45 @@ def test_max_attempts_becomes_dead_and_manual_retry_recovers(router):
     assert instance.retry(result.record_id) == 1
     instance.drain_outbox(100)
     assert instance.store.delivery_states(result.record_id)["mnemosyne:retain"] == "complete"
+
+
+def test_checkpoint_metadata_is_sanitized_before_backend_delivery(router):
+    instance, primary, checkpoint = router
+    result = instance.checkpoint_record(
+        content="Metadata sanitation checkpoint.",
+        verification_level="tested",
+        evidence="metadata test",
+        metadata={"api_key": "plain-value", "nested": {"safe": "ok"}},
+    )
+    drain_all(instance)
+    assert result.record_id
+    for backend in (primary, checkpoint):
+        retained = next(iter(backend.retained.values()))
+        assert retained["metadata"]["api_key"] == "[REDACTED]"
+        assert retained["metadata"]["nested"]["safe"] == "ok"
+
+
+def test_backend_error_is_redacted_before_store(router):
+    instance, primary, checkpoint = router
+    checkpoint.fail_retain = 1
+    original = checkpoint.retain
+
+    fake_bearer = "-".join(("demo", "token", "not", "secret")) * 2
+
+    def secret_failure(**kwargs):
+        raise RuntimeError("Authorization: Bearer " + fake_bearer)
+
+    checkpoint.retain = secret_failure
+    result = instance.checkpoint_record(
+        content="Error redaction checkpoint.",
+        verification_level="tested",
+        evidence="controlled backend error",
+    )
+    instance.drain_outbox(100)
+    row = instance.store._connection().execute(
+        "SELECT last_error FROM deliveries WHERE record_id=? AND backend='mnemosyne'",
+        (result.record_id,),
+    ).fetchone()
+    assert fake_bearer not in row["last_error"]
+    assert "[REDACTED]" in row["last_error"]
+    checkpoint.retain = original

@@ -30,6 +30,5 @@ def test_cli_init_refuses_overwrite(tmp_path):
         "init", "--namespace", "project", "--environment", "staging",
     ]
     assert main(args) == 0
-    with pytest.raises(SystemExit, match="already exists"):
-        main(args)
+    assert main(args) == 2
     assert main(args + ["--force"]) == 0

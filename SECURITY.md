@@ -1,26 +1,36 @@
 # Security policy
 
-## Supported versions
+## Supported releases
 
-Only the latest tagged pre-release is supported before `1.0`.
+Before `1.0`, only the newest tagged beta is supported. Older pre-releases may
+contain known issues and should not remain in production.
 
-## Reporting
+## Reporting a vulnerability
 
-Do not open public issues for suspected vulnerabilities or leaked secrets.
+Please do not open a public issue for a security problem or an exposed secret.
 Use GitHub's private vulnerability reporting feature for this repository.
 
-Include:
+A useful report includes:
 
-- affected version and configuration;
-- reproduction steps;
-- impact;
+- the affected router version;
+- the relevant configuration, with secrets removed;
+- steps that reproduce the problem;
+- the likely impact;
 - whether real credentials or personal data were involved;
-- suggested mitigation, when known.
+- any mitigation you have already tested.
 
-The maintainer aims to acknowledge valid reports within seven days. No response
-time is guaranteed.
+The maintainer will try to acknowledge a valid report within seven days. This is
+a community project and does not offer a response-time guarantee.
 
-## Secret exposure
+## When a secret is exposed
 
-Immediately revoke exposed credentials. Removing a secret from Git history does
-not revoke it. Review Hindsight, Mnemosyne, router, backups, and logs.
+Revoke it first. Deleting a value from a file or Git history does not make the
+credential safe again.
+
+After rotation, check:
+
+- Hindsight;
+- Mnemosyne;
+- the router database;
+- setup and service logs;
+- backups and exported archives.

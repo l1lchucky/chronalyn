@@ -1,17 +1,18 @@
 # Releasing Hermes Memory Router
 
-## Pre-release gate
+## Before tagging a release
 
-1. Confirm the working tree contains no credentials, local databases, build
-   output, or private deployment configuration.
-2. Run:
+1. Confirm the working tree contains no credentials, local databases, generated
+   reports, build output, or private deployment settings.
+2. Run the full local gate:
 
    ```bash
    make check
-   bash -n scripts/*.sh
+   make quality
+   make audit
    ```
 
-3. Build and inspect distributions:
+3. Build and inspect the distributions:
 
    ```bash
    python -m build
@@ -19,21 +20,25 @@
    twine check dist/*
    ```
 
-4. Install the wheel in a clean virtual environment.
-5. Run the full live validation matrix in `docs/live-validation.md`.
+4. Install the wheel in a clean virtual environment and run the CLI/plugin smoke
+   test.
+5. Complete `docs/live-validation.md` on staging.
 6. Update `CHANGELOG.md`, `docs/compatibility.md`, and the version in:
+
    - `pyproject.toml`
    - `plugin.yaml`
    - `src/hermes_memory_router/__init__.py`
    - `src/hermes_memory_router/resources/plugin.yaml`
-7. Create a signed tag:
+   - `CITATION.cff`
+
+7. Create and push a signed tag:
 
    ```bash
-   git tag -s v0.1.0-alpha.1 -m "Hermes Memory Router v0.1.0-alpha.1"
-   git push origin v0.1.0-alpha.1
+   git tag -s v0.2.0-beta.1 -m "Hermes Memory Router v0.2.0-beta.1"
+   git push origin v0.2.0-beta.1
    ```
 
-## GitHub repository settings
+## GitHub settings
 
 Before making the repository public:
 
@@ -44,11 +49,10 @@ Before making the repository public:
 - protect `main`;
 - require CI and security checks;
 - require CODEOWNER review for security-sensitive paths;
-- disallow force pushes and branch deletion;
-- enable signed-commit vigilance where practical.
+- disallow force pushes and branch deletion.
 
 ## PyPI
 
-The alpha release should remain GitHub-only until the live staging matrix passes.
-When publishing to PyPI, use Trusted Publishing from the GitHub release workflow
-rather than a long-lived PyPI token.
+Keep the beta on GitHub Releases until the live staging checklist passes. When
+PyPI publishing is enabled, use GitHub Trusted Publishing instead of a
+long-lived PyPI token.

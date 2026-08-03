@@ -1,29 +1,33 @@
-# Operations runbook
+# Operations
 
-## Daily
+## Regular checks
 
-- Check failed delivery count.
-- Check Hindsight and Mnemosyne health.
-- Confirm disk space and backup completion.
+- review failed and dead deliveries;
+- check Hindsight and Mnemosyne health;
+- watch disk space;
+- confirm backups completed;
+- keep staging and production markers separate.
 
-## Before deployment
+## Before a deployment
 
-- Ensure outbox has no failed deliveries.
-- Back up all three data stores.
-- Record version, config checksum, and rollback command.
-- Run a unique isolation marker.
+1. Drain the outbox.
+2. Confirm there are no failed deletes.
+3. Back up the router, Mnemosyne, Hindsight, and Hermes profile.
+4. Record the current versions and rollback command.
+5. Run a unique isolation marker on staging.
 
-## After deployment
+## After a deployment
 
-- Run `memory_router_status`.
-- Create and recall a non-sensitive checkpoint.
-- Delete the test checkpoint and confirm both delete deliveries complete.
-- Review gateway logs for memory errors.
+1. Run `hermes-memory-router status`.
+2. Create a harmless test checkpoint.
+3. Recall it.
+4. Delete it and confirm both backend deletes finish.
+5. Review the gateway log for memory errors.
 
-## Alert thresholds
+## Suggested alerts
 
-- any failed deletion: urgent;
-- failed retains older than 15 minutes: warning;
-- router DB integrity failure: critical;
-- cross-environment marker recall: critical and immediate shutdown;
-- disk usage above 80%: warning.
+- any failed delete: urgent;
+- a retain failure older than 15 minutes: warning;
+- router database integrity failure: critical;
+- a staging marker recalled in production: critical, disable immediately;
+- disk usage above 80 percent: warning.

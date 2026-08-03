@@ -1,11 +1,9 @@
 name: hermes_memory_router
-version: 0.1.0-alpha.1
-description: Policy-based Hermes memory router with Hindsight primary and Mnemosyne checkpoints.
-pip_dependencies:
-  - "mnemosyne-memory>=3.15,<4"
+version: 0.2.0-beta.1
+description: Keep Hindsight automatic while Mnemosyne stores verified checkpoints.
+pip_dependencies: []
 requires_env: []
 hooks:
   - on_session_end
   - on_pre_compress
   - on_memory_write
-  - on_delegation

@@ -1,42 +1,54 @@
 # Data model
 
+The router uses one SQLite database as its control plane.
+
+## `bindings`
+
+Records the Hermes profile path, namespace, and environment that own the
+database. A different binding cannot open it accidentally.
+
 ## `records`
 
-One sanitized logical memory record. A checksum uniqueness constraint provides
-idempotency within namespace, environment, and kind.
+Stores one sanitized logical memory record with an `mr_...` ID. A checksum makes
+repeated submissions idempotent within the same namespace, environment, and
+record type.
 
 ## `deliveries`
 
-One backend operation for a record:
+Stores one backend operation for one record:
 
 - backend;
 - retain or delete;
-- pending, processing, failed, or complete;
-- external backend identifier;
-- attempts and next retry time;
-- last error and receipt.
+- state;
+- backend ID;
+- attempt count and retry time;
+- last error;
+- receipt metadata.
+
+Delivery states:
+
+- `pending`: waiting for the worker;
+- `processing`: currently running;
+- `failed`: retry is scheduled;
+- `dead`: automatic attempts stopped and an operator must retry;
+- `cancelled`: a pending write was stopped because the record was forgotten;
+- `complete`: the backend confirmed the operation.
 
 ## `audit_events`
 
-Append-only operational events. This is an operational audit trail, not a legal
-compliance log.
+Keeps a small operational history of router actions. It is useful for debugging
+but is not intended as a legal compliance log.
 
-## Deletion lifecycle
+## Delete flow
 
 ```text
-record retained
-  ├── Hindsight receipt: document ID
-  └── Mnemosyne receipt: memory ID
+mr_123
+├── Hindsight receipt -> document ID
+└── Mnemosyne receipt -> memory ID
 
-forget requested
-  ├── Hindsight document deletion delivery
-  └── Mnemosyne forget delivery
+forget mr_123
+├── delete Hindsight document
+└── forget Mnemosyne memory
 ```
 
-
-## Delivery terminal states
-
-- `complete`: backend operation confirmed.
-- `cancelled`: retain was prevented because forget was requested first.
-- `dead`: automatic attempts reached the configured maximum; manual retry can
-  return it to `pending`.
+A delete is finished only when every required delivery is complete.

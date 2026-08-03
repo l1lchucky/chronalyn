@@ -1,59 +1,62 @@
 # Architecture
 
-## Components
-
 ```text
 Hermes MemoryManager
         │
         ▼
 HermesMemoryRouterProvider
         │
-        ├── policy and redaction
-        ├── SQLite control plane
-        │   ├── records
+        ├── routing policy and redaction
+        ├── SQLite control database
+        │   ├── logical records
         │   ├── backend deliveries
-        │   ├── retries
+        │   ├── retries and errors
         │   └── audit events
         │
         ├── Hindsight REST adapter
-        └── Mnemosyne Python adapter
+        └── optional Mnemosyne adapter
 ```
 
-Hermes sees one provider and one compact tool set. The provider implements the
-current Hermes lifecycle: initialization, prompt block, prefetch, turn sync,
-tools, session switch, pre-compression, backup paths, and shutdown.
+## What Hermes sees
 
-## Authority
+Hermes sees one provider, one prompt contribution, and one small tool set. The
+provider follows the normal Hermes lifecycle: initialize, prefetch, sync a turn,
+handle tools, switch sessions, prepare for compression, report backup paths, and
+shut down.
 
-1. Repository, runtime, database, service, and deployment evidence.
-2. Hindsight automatic memory.
-3. Mnemosyne verified checkpoints.
-4. Conversation inference.
+## What counts as truth
 
-Memory never overrides directly observed state.
+Current repository, database, service, and deployment state always outrank a
+memory result. Hindsight is the main long-term memory. Mnemosyne checkpoints are
+a recovery aid. Neither backend is allowed to overrule direct evidence.
 
-## Write path
+## Write flow
 
-Automatic turns are sanitized, deduplicated, committed to SQLite, and queued
-only for Hindsight. Checkpoints are queued for both backends. The caller is not
-blocked on backend latency.
+1. The router sanitizes and bounds the content.
+2. It writes a logical record and delivery jobs to SQLite.
+3. `sync_turn()` returns to Hermes.
+4. The background worker sends each due job to its backend.
+5. The receipt and backend ID are saved for retry and deletion.
 
-## Read path
+Normal turns create one Hindsight delivery. Dual-mode checkpoints create one
+Hindsight delivery and one Mnemosyne delivery.
 
-Hindsight is queried first. Mnemosyne is queried only when Hindsight returns no
-hits or raises an error and the matching fallback option is enabled. Fallback
-content has a strict character budget.
+## Read flow
 
-## Control-plane durability
+Hindsight is queried first. Mnemosyne is queried only when the policy allows
+fallback and Hindsight either fails or returns no result. Fallback content has a
+small character budget and contains checkpoints only.
 
-Each record has a stable `mr_<uuid>` identifier. Each backend operation has its
-own delivery row with attempts, next retry time, external ID, receipt, and last
-error. Deletion is generated from successful retain receipts, preventing the
-router from claiming a backend deletion it cannot identify.
+## SQLite control database
 
-## Concurrency
+Each logical record receives an `mr_...` ID. Delivery rows track:
 
-SQLite runs in WAL mode with a 30-second busy timeout. Record creation uses an
-immediate transaction and a uniqueness constraint over namespace, environment,
-kind, and content checksum. This makes repeated checkpoint submissions
-idempotent under concurrent gateway sessions.
+- backend and operation;
+- pending, processing, failed, dead, cancelled, or complete state;
+- attempt count and next retry time;
+- backend ID and receipt;
+- last error.
+
+SQLite uses WAL mode, foreign keys, full synchronization, and a busy timeout.
+Record creation uses a unique checksum within the active namespace and
+environment so repeated checkpoint submissions are idempotent.

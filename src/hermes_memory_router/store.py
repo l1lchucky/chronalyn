@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import sqlite3
 import threading
 import time
@@ -9,18 +10,37 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .exceptions import ConfigurationError
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 class RouterStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        namespace: str = "",
+        environment: str = "",
+        profile_fingerprint: str = "",
+        strict_binding: bool = False,
+    ) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self._connections: set[sqlite3.Connection] = set()
         self._connections_lock = threading.Lock()
-        self._migrate()
+        try:
+            self._migrate()
+            if strict_binding:
+                self._bind(
+                    namespace=namespace,
+                    environment=environment,
+                    profile_fingerprint=profile_fingerprint,
+                )
+        except BaseException:
+            self.close()
+            raise
 
     def _connection(self) -> sqlite3.Connection:
         connection = getattr(self._local, "connection", None)
@@ -40,57 +60,122 @@ class RouterStore:
 
     def _migrate(self) -> None:
         conn = self._connection()
-        conn.executescript("""
-        CREATE TABLE IF NOT EXISTS schema_meta (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key='version'"
+        ).fetchone()
+        existing_version = 0
+        if row is not None:
+            try:
+                existing_version = int(row["value"])
+            except (TypeError, ValueError) as exc:
+                raise ConfigurationError(
+                    f"Router database has an invalid schema version: {row['value']!r}"
+                ) from exc
+        if existing_version > _SCHEMA_VERSION:
+            raise ConfigurationError(
+                f"Router database schema {existing_version} is newer than supported "
+                f"schema {_SCHEMA_VERSION}; refusing a destructive downgrade"
+            )
 
-        CREATE TABLE IF NOT EXISTS records (
-            id TEXT PRIMARY KEY,
-            namespace TEXT NOT NULL,
-            environment TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            content TEXT NOT NULL,
-            metadata_json TEXT NOT NULL,
-            checksum TEXT NOT NULL,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            created_at REAL NOT NULL,
-            updated_at REAL NOT NULL,
-            UNIQUE(namespace, environment, kind, checksum)
-        );
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS records (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                content TEXT NOT NULL,
+                metadata_json TEXT NOT NULL,
+                checksum TEXT NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                UNIQUE(namespace, environment, kind, checksum)
+            );
 
-        CREATE TABLE IF NOT EXISTS deliveries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
-            backend TEXT NOT NULL,
-            operation TEXT NOT NULL,
-            state TEXT NOT NULL,
-            external_id TEXT,
-            receipt_json TEXT NOT NULL DEFAULT '{}',
-            attempts INTEGER NOT NULL DEFAULT 0,
-            next_attempt_at REAL NOT NULL DEFAULT 0,
-            last_error TEXT,
-            created_at REAL NOT NULL,
-            updated_at REAL NOT NULL,
-            UNIQUE(record_id, backend, operation)
-        );
+            CREATE TABLE IF NOT EXISTS deliveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+                backend TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                state TEXT NOT NULL,
+                external_id TEXT,
+                receipt_json TEXT NOT NULL DEFAULT '{}',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at REAL NOT NULL DEFAULT 0,
+                last_error TEXT,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                UNIQUE(record_id, backend, operation)
+            );
 
-        CREATE INDEX IF NOT EXISTS idx_deliveries_due
-        ON deliveries(state, next_attempt_at);
+            CREATE INDEX IF NOT EXISTS idx_deliveries_due
+            ON deliveries(state, next_attempt_at);
 
-        CREATE TABLE IF NOT EXISTS audit_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            record_id TEXT,
-            event TEXT NOT NULL,
-            details_json TEXT NOT NULL,
-            created_at REAL NOT NULL
-        );
-        """)
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_id TEXT,
+                event TEXT NOT NULL,
+                details_json TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deletion_plans (
+                token_hash TEXT PRIMARY KEY,
+                record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+                expires_at REAL NOT NULL,
+                used_at REAL,
+                created_at REAL NOT NULL
+            );
+            """
+        )
         conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('version', ?)",
             (str(_SCHEMA_VERSION),),
         )
+
+    def _meta(self, key: str) -> str | None:
+        row = self._connection().execute(
+            "SELECT value FROM schema_meta WHERE key=?", (key,)
+        ).fetchone()
+        return str(row["value"]) if row else None
+
+    def _bind(self, *, namespace: str, environment: str, profile_fingerprint: str) -> None:
+        expected = {
+            "binding_namespace": namespace,
+            "binding_environment": environment,
+            "binding_profile": profile_fingerprint,
+        }
+        conn = self._connection()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for key, value in expected.items():
+                current = conn.execute(
+                    "SELECT value FROM schema_meta WHERE key=?", (key,)
+                ).fetchone()
+                if current and str(current["value"]) != value:
+                    raise ConfigurationError(
+                        f"Router database binding mismatch for {key}: "
+                        f"database={current['value']!r}, configuration={value!r}. "
+                        "Refusing cross-profile or cross-environment open."
+                    )
+                if not current:
+                    conn.execute(
+                        "INSERT INTO schema_meta(key, value) VALUES(?, ?)",
+                        (key, value),
+                    )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
 
     @staticmethod
     def checksum(content: str, metadata: dict[str, Any]) -> str:
@@ -137,9 +222,15 @@ class RouterStore:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    record_id, namespace, environment, kind, content,
+                    record_id,
+                    namespace,
+                    environment,
+                    kind,
+                    content,
                     json.dumps(metadata, sort_keys=True),
-                    checksum, now, now,
+                    checksum,
+                    now,
+                    now,
                 ),
             )
             for backend in backends:
@@ -193,14 +284,13 @@ class RouterStore:
         return results
 
     def claim(self, delivery_id: int) -> bool:
-        now = time.time()
         cursor = self._connection().execute(
             """
             UPDATE deliveries
             SET state='processing', attempts=attempts+1, updated_at=?
             WHERE id=? AND state IN ('pending', 'failed')
             """,
-            (now, delivery_id),
+            (time.time(), delivery_id),
         )
         return cursor.rowcount == 1
 
@@ -293,56 +383,141 @@ class RouterStore:
             for row in rows
         }
 
+    def create_deletion_plan(self, record_id: str, *, ttl_seconds: int = 300) -> str:
+        record = self.record(record_id)
+        if not record:
+            raise KeyError(record_id)
+        if int(record["deleted"]):
+            raise ConfigurationError(f"Record {record_id} is already marked deleted")
+        token = secrets.token_urlsafe(24)
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        now = time.time()
+        self._connection().execute(
+            """
+            INSERT INTO deletion_plans(token_hash, record_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token_hash, record_id, now + ttl_seconds, now),
+        )
+        self.audit(record_id, "delete_planned", {"expires_in_seconds": ttl_seconds})
+        return token
+
+    def consume_deletion_plan(self, record_id: str, token: str) -> None:
+        """Validate and consume a token without deleting (legacy library API)."""
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        now = time.time()
+        conn = self._connection()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._consume_deletion_plan_conn(
+                conn, record_id=record_id, token_hash=token_hash, now=now
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+    @staticmethod
+    def _consume_deletion_plan_conn(
+        conn: sqlite3.Connection,
+        *,
+        record_id: str,
+        token_hash: str,
+        now: float,
+    ) -> None:
+        row = conn.execute(
+            """
+            SELECT record_id, expires_at, used_at
+            FROM deletion_plans WHERE token_hash=?
+            """,
+            (token_hash,),
+        ).fetchone()
+        if not row or str(row["record_id"]) != record_id:
+            raise ConfigurationError("Invalid deletion confirmation token")
+        if row["used_at"] is not None:
+            raise ConfigurationError("Deletion confirmation token was already used")
+        if float(row["expires_at"]) < now:
+            raise ConfigurationError("Deletion confirmation token expired")
+        conn.execute(
+            "UPDATE deletion_plans SET used_at=? WHERE token_hash=?",
+            (now, token_hash),
+        )
+
+    @staticmethod
+    def _schedule_delete_conn(
+        conn: sqlite3.Connection,
+        *,
+        record_id: str,
+        now: float,
+    ) -> None:
+        record = conn.execute(
+            "SELECT id FROM records WHERE id=?", (record_id,)
+        ).fetchone()
+        if not record:
+            raise KeyError(record_id)
+        conn.execute(
+            "UPDATE records SET deleted=1, updated_at=? WHERE id=?",
+            (now, record_id),
+        )
+        conn.execute(
+            """
+            UPDATE deliveries
+            SET state='cancelled', updated_at=?,
+                last_error='cancelled because record was forgotten'
+            WHERE record_id=? AND operation='retain'
+              AND state IN ('pending', 'failed', 'dead')
+            """,
+            (now, record_id),
+        )
+        receipts = conn.execute(
+            """
+            SELECT backend, external_id, receipt_json
+            FROM deliveries
+            WHERE record_id=? AND operation='retain' AND state='complete'
+            """,
+            (record_id,),
+        ).fetchall()
+        for receipt in receipts:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO deliveries(
+                    record_id, backend, operation, state, external_id,
+                    receipt_json, created_at, updated_at
+                ) VALUES (?, ?, 'delete', 'pending', ?, ?, ?, ?)
+                """,
+                (
+                    record_id,
+                    receipt["backend"],
+                    receipt["external_id"],
+                    receipt["receipt_json"],
+                    now,
+                    now,
+                ),
+            )
+        RouterStore._audit_conn(conn, record_id, "delete_scheduled", {})
+
+    def apply_deletion_plan(self, record_id: str, token: str) -> None:
+        """Consume a token and schedule all backend deletes atomically."""
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        now = time.time()
+        conn = self._connection()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._consume_deletion_plan_conn(
+                conn, record_id=record_id, token_hash=token_hash, now=now
+            )
+            self._schedule_delete_conn(conn, record_id=record_id, now=now)
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
     def schedule_delete(self, record_id: str) -> None:
         now = time.time()
         conn = self._connection()
         conn.execute("BEGIN IMMEDIATE")
         try:
-            record = conn.execute(
-                "SELECT id FROM records WHERE id=?", (record_id,)
-            ).fetchone()
-            if not record:
-                raise KeyError(record_id)
-            conn.execute(
-                "UPDATE records SET deleted=1, updated_at=? WHERE id=?",
-                (now, record_id),
-            )
-            conn.execute(
-                """
-                UPDATE deliveries
-                SET state='cancelled', updated_at=?,
-                    last_error='cancelled because record was forgotten'
-                WHERE record_id=? AND operation='retain'
-                  AND state IN ('pending', 'failed', 'dead')
-                """,
-                (now, record_id),
-            )
-            receipts = conn.execute(
-                """
-                SELECT backend, external_id, receipt_json
-                FROM deliveries
-                WHERE record_id=? AND operation='retain' AND state='complete'
-                """,
-                (record_id,),
-            ).fetchall()
-            for receipt in receipts:
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO deliveries(
-                        record_id, backend, operation, state, external_id,
-                        receipt_json, created_at, updated_at
-                    ) VALUES (?, ?, 'delete', 'pending', ?, ?, ?, ?)
-                    """,
-                    (
-                        record_id,
-                        receipt["backend"],
-                        receipt["external_id"],
-                        receipt["receipt_json"],
-                        now,
-                        now,
-                    ),
-                )
-            self._audit_conn(conn, record_id, "delete_scheduled", {})
+            self._schedule_delete_conn(conn, record_id=record_id, now=now)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
@@ -372,21 +547,22 @@ class RouterStore:
         conn = self._connection()
         record_counts = {
             row["kind"]: row["count"]
-            for row in conn.execute(
-                "SELECT kind, COUNT(*) count FROM records GROUP BY kind"
-            )
+            for row in conn.execute("SELECT kind, COUNT(*) count FROM records GROUP BY kind")
         }
         delivery_counts = {
             row["state"]: row["count"]
-            for row in conn.execute(
-                "SELECT state, COUNT(*) count FROM deliveries GROUP BY state"
-            )
+            for row in conn.execute("SELECT state, COUNT(*) count FROM deliveries GROUP BY state")
         }
         return {
             "schema_version": _SCHEMA_VERSION,
             "records": record_counts,
             "deliveries": delivery_counts,
             "db_path": str(self.path),
+            "binding": {
+                "namespace": self._meta("binding_namespace"),
+                "environment": self._meta("binding_environment"),
+                "profile": self._meta("binding_profile"),
+            },
         }
 
     def audit(self, record_id: str | None, event: str, details: dict[str, Any]) -> None:
@@ -407,7 +583,9 @@ class RouterStore:
             (record_id, event, json.dumps(details, sort_keys=True), time.time()),
         )
 
-    def list_records(self, *, kind: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    def list_records(
+        self, *, kind: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
         if kind:
             rows = self._connection().execute(
                 """

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .config import RedactionConfig
@@ -132,3 +133,102 @@ def sanitize(text: str, config: RedactionConfig) -> RedactionResult:
         )
 
     return RedactionResult(output, tuple(sorted(set(findings))), truncated)
+
+
+@dataclass(frozen=True)
+class MetadataRedactionResult:
+    value: Any
+    findings: tuple[str, ...]
+    truncated: bool
+
+
+_SENSITIVE_METADATA_KEYS = {
+    "api_key",
+    "apikey",
+    "authorization",
+    "access_token",
+    "refresh_token",
+    "token",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "client_secret",
+    "private_key",
+    "cookie",
+    "set_cookie",
+}
+
+
+def _normalized_key(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
+
+
+def sanitize_metadata(
+    value: Any,
+    config: RedactionConfig,
+    *,
+    max_depth: int = 6,
+    max_items: int = 100,
+) -> MetadataRedactionResult:
+    """Recursively sanitize model-supplied metadata before persistence.
+
+    Metadata is treated as untrusted input. Sensitive key names are blocked even
+    when their values do not look token-like, strings use the normal redactor,
+    containers are bounded, and non-JSON values are converted to sanitized text.
+    """
+
+    findings: list[str] = []
+    truncated = False
+
+    def reject_or_replace(name: str) -> str:
+        findings.append(name)
+        if config.mode == "reject":
+            raise SecretDetected(
+                "Metadata rejected because a sensitive field was detected: " + name
+            )
+        return config.replacement
+
+    def walk(item: Any, depth: int) -> Any:
+        nonlocal truncated
+        if depth > max_depth:
+            truncated = True
+            return "[TRUNCATED_DEPTH]"
+        if item is None or isinstance(item, (bool, int, float)):
+            return item
+        if isinstance(item, str):
+            result = sanitize(item, config)
+            findings.extend(result.findings)
+            truncated = truncated or result.truncated
+            return result.text
+        if isinstance(item, dict):
+            output: dict[str, Any] = {}
+            for index, (raw_key, raw_value) in enumerate(item.items()):
+                if index >= max_items:
+                    truncated = True
+                    break
+                key_result = sanitize(str(raw_key), config)
+                findings.extend(key_result.findings)
+                key = key_result.text[:256]
+                normalized = _normalized_key(raw_key)
+                if normalized in _SENSITIVE_METADATA_KEYS or normalized.endswith(
+                    ("_token", "_secret", "_password", "_api_key")
+                ):
+                    output[key] = reject_or_replace(f"metadata_key:{normalized}")
+                else:
+                    output[key] = walk(raw_value, depth + 1)
+            return output
+        if isinstance(item, (list, tuple, set, frozenset)):
+            values = list(item)
+            if len(values) > max_items:
+                truncated = True
+                values = values[:max_items]
+            return [walk(entry, depth + 1) for entry in values]
+        return walk(str(item), depth + 1)
+
+    sanitized = walk(value, 0)
+    return MetadataRedactionResult(
+        sanitized,
+        tuple(sorted(set(findings))),
+        truncated,
+    )

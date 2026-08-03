@@ -1,9 +1,10 @@
 # Support
 
-Use GitHub Discussions for usage questions and GitHub Issues for reproducible
-bugs. This community project has no SLA and no paid support.
+Use GitHub Discussions for setup questions and GitHub Issues for reproducible
+bugs. This is a community project with no service-level agreement or paid
+support plan.
 
-Before filing a bug, include sanitized output from:
+Before reporting a bug, include sanitized output from:
 
 ```bash
 hermes-memory-router validate
@@ -11,5 +12,5 @@ hermes-memory-router status
 python --version
 ```
 
-Never include API keys, raw `.env` files, customer data, signed URLs, or full
-memory databases.
+Do not post API keys, raw `.env` files, customer information, signed URLs, or a
+complete memory database.

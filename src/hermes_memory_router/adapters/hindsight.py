@@ -31,7 +31,7 @@ class HindsightBackend(MemoryBackend):
     def _headers(self) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "hermes-memory-router/0.1.0-alpha.1",
+            "User-Agent": "hermes-memory-router/0.2.0-beta.1",
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -72,11 +72,18 @@ class HindsightBackend(MemoryBackend):
             ) from exc
 
     def health(self) -> dict[str, Any]:
-        try:
-            payload = self._request("GET", "/health", timeout=min(5.0, self.config.timeout_seconds))
-            return {"ok": True, "details": payload}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+        errors: list[str] = []
+        for path in ("/health", "/version"):
+            try:
+                payload = self._request(
+                    "GET",
+                    path,
+                    timeout=min(5.0, self.config.timeout_seconds),
+                )
+                return {"ok": True, "endpoint": path, "details": payload}
+            except Exception as exc:
+                errors.append(f"{path}: {exc}")
+        return {"ok": False, "error": "; ".join(errors)}
 
     def retain(
         self,

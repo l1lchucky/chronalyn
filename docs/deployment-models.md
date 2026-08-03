@@ -1,142 +1,121 @@
 # Deployment models
 
-The router always runs inside the Hermes environment. Hindsight may be local or
-hosted. Mnemosyne is local to the router in the initial release.
+The router runs inside Hermes. Hindsight can be local or remote. Mnemosyne stays
+local in the current release.
 
-## Model A: fully self-hosted and physically isolated
+## Separate self-hosted stacks
 
 ```text
 Staging server
-├── Hermes + router
-├── local Hindsight API/database
-├── local Mnemosyne checkpoint bank
-└── local router SQLite control plane
+├── Hermes and router
+├── self-hosted Hindsight
+└── local Mnemosyne
 
 Production server
-├── Hermes + router
-├── separate local Hindsight API/database
-├── separate local Mnemosyne checkpoint bank
-└── separate local router SQLite control plane
+├── Hermes and router
+├── separate self-hosted Hindsight
+└── separate local Mnemosyne
 ```
 
-### Advantages
+Best for: sensitive production data and strong staging/production isolation.
 
-- strongest staging/production boundary;
-- memory remains available without home connectivity or a third-party cloud;
-- full control of retention, backups, database, and LLM provider;
-- Hindsight can use an OpenAI-compatible API while embeddings and storage stay
-  on the server.
+Advantages:
 
-### Costs
+- each environment has a separate failure and trust boundary;
+- memory databases remain under your control;
+- a wrong bank name cannot reach the other server unless networking also allows
+  it.
 
-- two Hindsight deployments to patch and monitor;
-- database, disk, backup, and resource requirements on both servers;
-- self-hosted Hindsight still needs an LLM provider for extraction and reflect
-  unless a suitable local model is configured.
+Costs:
 
-### Recommended for
+- two Hindsight installations to update and monitor;
+- more memory, disk, and database work;
+- a language-model provider is still needed for Hindsight extraction and
+  reflection unless your Hindsight setup handles it locally.
 
-Sensitive production environments, strict isolation, and teams with reliable
-server operations.
-
-## Model B: Hindsight Cloud plus local Mnemosyne
+## Hindsight Cloud with local Mnemosyne
 
 ```text
-Hermes server
+Hermes host
+├── router and SQLite control database
+├── Hindsight Cloud over HTTPS
+└── local Mnemosyne checkpoints
+```
+
+Best for: small hosts and teams that prefer managed Hindsight infrastructure.
+
+Advantages:
+
+- no local Hindsight service to operate;
+- local checkpoints remain available during a cloud outage;
+- router retries survive temporary network failures.
+
+Costs:
+
+- sanitized automatic memory leaves the host;
+- internet availability affects primary recall;
+- isolation relies on separate credentials and bank IDs rather than separate
+  Hindsight servers.
+
+## Central self-hosted Hindsight
+
+```text
+Private memory server
+└── Hindsight
+    ├── staging bank
+    └── production bank
+
+Each Hermes host
 ├── router
-├── Hindsight Cloud bank through HTTPS
-├── local Mnemosyne checkpoint bank
-└── local router SQLite control plane
+└── local Mnemosyne
 ```
 
-### Advantages
+Best for: a private VPS or internal network where one Hindsight service is easier
+to maintain.
 
-- Hindsight operations, scaling, upgrades, and availability are managed;
-- local Mnemosyne still provides an independent checkpoint/fallback copy;
-- the router continues to provide retries, mappings, and coordinated deletion;
-- fastest route to a dependable deployment.
+Advantages:
 
-### Costs
+- one Hindsight installation;
+- central backup and monitoring;
+- local checkpoint fallback on each Hermes host.
 
-- automatic conversation memory is sent to Hindsight Cloud after router
-  redaction/rejection policy;
-- usage and long-term storage are billed;
-- availability depends on network and vendor service;
-- bank and API-key configuration becomes the main isolation boundary.
+Costs:
 
-### Recommended for
+- one outage affects every environment;
+- bank configuration errors have a wider impact;
+- logical separation is weaker than separate servers.
 
-Most users who value low maintenance more than keeping all Hindsight content on
-their own infrastructure.
+A home Raspberry Pi can be useful for backups and monitoring. It is a weaker
+choice for the only production Hindsight service because home power and internet
+become production dependencies.
 
-## Model C: one central self-hosted Hindsight API plus local Mnemosyne per host
+## Self-hosted Hindsight with an external model API
 
 ```text
-Central private Hindsight service
-├── bank: staging
-└── bank: production
+Your server
+├── Hindsight data and API
+├── router
+└── local Mnemosyne
 
-Staging server: Hermes + router + local Mnemosyne
-Production server: Hermes + router + local Mnemosyne
+External model API
+└── Hindsight extraction and reflection
 ```
 
-### Advantages
+This keeps the memory database under your control while using an OpenAI-compatible
+model endpoint for Hindsight's model work. Content sent for extraction still
+leaves the server, so review that provider's privacy and retention terms.
 
-- only one Hindsight deployment to maintain;
-- local checkpoint ledgers remain available during a Hindsight outage;
-- lower total RAM and database administration than two Hindsight installations.
+## Mnemosyne sync
 
-### Costs
+Mnemosyne can be backed up or synchronized separately. That sync is outside the
+router's delivery transaction. Use different sync identities, keys, and stores
+for staging and production.
 
-- central Hindsight is a shared dependency;
-- a wrong URL, key, or bank ID can weaken environment isolation;
-- central outage affects automatic memory in both environments;
-- network latency is added to every primary recall.
+## Practical recommendations
 
-### Recommended for
-
-A private network with competent access control where operational simplicity is
-more important than physical isolation.
-
-## Model D: Hindsight Cloud plus a self-hosted Mnemosyne sync server
-
-The initial router writes to a local Mnemosyne bank. Mnemosyne Sync may then
-replicate that local bank to a VPS or backup server.
-
-### Advantages
-
-- managed Hindsight;
-- local checkpoint reads;
-- encrypted Mnemosyne synchronization can provide off-host recovery;
-- no shared writable SQLite file over a network filesystem.
-
-### Costs
-
-- the sync server is another service to secure and monitor;
-- synchronization is eventual, not part of the router transaction;
-- staging and production must use different sync identities, keys, and stores.
-
-### Important clarification
-
-The official Mnemosyne project documents a self-hosted sync service for VPS,
-Docker, bare metal, and Fly.io deployments. Do not assume the existence of a
-first-party managed Mnemosyne Cloud product unless the maintainers publish one.
-
-## Model E: laptop or Raspberry Pi hosted backends
-
-This is suitable for development, personal agents, backup, or monitoring. It is
-not the preferred dependency for a customer-facing production server because
-home power, sleep, storage, and internet become part of production memory
-availability.
-
-## Recommended security controls for every remote model
-
-- HTTPS with certificate verification;
-- bank-scoped or least-privilege Hindsight API keys;
-- separate keys for staging and production;
-- no API keys in JSON configuration or Git;
-- production `redaction.mode=reject`;
-- firewall or private network restrictions;
-- encrypted backups with tested restoration;
-- alerts for failed or dead router deliveries;
-- unique cross-environment isolation markers during deployment.
+- strongest isolation: separate self-hosted stacks;
+- easiest maintenance: Hindsight Cloud plus local Mnemosyne;
+- balanced private setup: central Hindsight on a reliable private VPS, local
+  Mnemosyne on each Hermes host;
+- start on staging, then choose production hosting after real load and memory
+  quality are understood.

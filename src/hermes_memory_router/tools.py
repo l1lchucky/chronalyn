@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .config import RouterConfig
+
 VERIFICATION_LEVELS = [
     "investigated",
     "planned",
@@ -13,12 +15,32 @@ VERIFICATION_LEVELS = [
     "environment-verified",
 ]
 
-TOOL_SCHEMAS = [
-    {
+
+def _retain_schema() -> dict:
+    return {
+        "name": "memory_router_retain",
+        "description": (
+            "Store an explicit durable memory in Hindsight through the router's "
+            "redaction, idempotency, and retry controls."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string"},
+                "context": {"type": "string"},
+                "metadata": {"type": "object"},
+            },
+            "required": ["content"],
+        },
+    }
+
+
+def _checkpoint_schema() -> dict:
+    return {
         "name": "memory_router_checkpoint",
         "description": (
-            "Store one evidence-backed milestone in Hindsight and Mnemosyne. "
-            "Use only after verifying the stated engineering status."
+            "Store one evidence-backed milestone using the fixed policy. Normal turns "
+            "are never duplicated to the checkpoint backend."
         ),
         "parameters": {
             "type": "object",
@@ -33,12 +55,15 @@ TOOL_SCHEMAS = [
             },
             "required": ["content", "verification_level", "evidence"],
         },
-    },
-    {
+    }
+
+
+def _recall_schema() -> dict:
+    return {
         "name": "memory_router_recall",
         "description": (
-            "Recall through the configured policy: Hindsight first, then "
-            "Mnemosyne checkpoints only when configured fallback conditions apply."
+            "Recall through the configured fixed policy. Results are never merged from "
+            "multiple automatic memory providers."
         ),
         "parameters": {
             "type": "object",
@@ -48,8 +73,11 @@ TOOL_SCHEMAS = [
             },
             "required": ["query"],
         },
-    },
-    {
+    }
+
+
+def _reflect_schema() -> dict:
+    return {
         "name": "memory_router_reflect",
         "description": "Ask Hindsight to synthesize an answer from primary memory.",
         "parameters": {
@@ -57,30 +85,58 @@ TOOL_SCHEMAS = [
             "properties": {"query": {"type": "string"}},
             "required": ["query"],
         },
-    },
-    {
-        "name": "memory_router_forget",
+    }
+
+
+def _status_schema() -> dict:
+    return {
+        "name": "memory_router_status",
+        "description": "Show policy, isolation binding, outbox, worker, and backend health.",
+        "parameters": {"type": "object", "properties": {}},
+    }
+
+
+def _forget_plan_schema() -> dict:
+    return {
+        "name": "memory_router_forget_plan",
         "description": (
-            "Schedule deletion of a router-managed record from every backend "
-            "that successfully retained it."
+            "Create a short-lived one-time confirmation token for deleting one "
+            "router-managed record. This step does not delete data."
         ),
         "parameters": {
             "type": "object",
             "properties": {"record_id": {"type": "string"}},
             "required": ["record_id"],
         },
-    },
-    {
-        "name": "memory_router_retry",
-        "description": "Retry failed backend deliveries.",
+    }
+
+
+def _forget_apply_schema() -> dict:
+    return {
+        "name": "memory_router_forget_apply",
+        "description": (
+            "Apply a previously planned deletion using its one-time confirmation token."
+        ),
         "parameters": {
             "type": "object",
-            "properties": {"record_id": {"type": "string"}},
+            "properties": {
+                "record_id": {"type": "string"},
+                "confirmation_token": {"type": "string"},
+            },
+            "required": ["record_id", "confirmation_token"],
         },
-    },
-    {
-        "name": "memory_router_status",
-        "description": "Show routing, outbox, isolation, worker, and backend health.",
-        "parameters": {"type": "object", "properties": {}},
-    },
-]
+    }
+
+
+def tool_schemas_for(config: RouterConfig) -> list[dict]:
+    schemas = [_recall_schema(), _reflect_schema(), _status_schema()]
+    if config.tools.profile == "standard":
+        schemas.insert(0, _checkpoint_schema())
+        schemas.insert(0, _retain_schema())
+    if config.tools.destructive_model_tools:
+        schemas.extend([_forget_plan_schema(), _forget_apply_schema()])
+    return schemas
+
+
+# Kept for tests and callers that inspect the default surface without configuration.
+TOOL_SCHEMAS = tool_schemas_for(RouterConfig())

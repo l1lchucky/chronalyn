@@ -1,106 +1,74 @@
-# Why use Hermes Memory Router?
+# Why use the router?
 
-Hermes Memory Router is not a replacement for Hindsight or Mnemosyne. It is a
-control and reliability layer that assigns each system a narrow role.
+The router is not a replacement for Hindsight or Mnemosyne. It gives each one a
+clear role and adds the operational glue between them.
 
-## The problem with connecting both MCP servers directly
+## Using both MCP servers directly
 
-A user can expose Hindsight MCP and Mnemosyne MCP to the same agent. That is
-useful for manual experimentation, but it leaves the model responsible for
-operational policy:
+Connecting both MCP servers gives the model two sets of tools. A person can then
+decide where each memory belongs and clean up mistakes manually.
 
-- deciding which system is authoritative;
-- deciding whether to write to one or both;
-- avoiding duplicate memories;
-- resolving conflicting recall results;
-- retrying partial writes;
-- remembering backend IDs for deletion;
-- deleting a logical record from both systems;
-- keeping staging and production namespaces separate;
-- keeping fallback context within a prompt budget.
+What is still missing:
 
-MCP gives the model tools. It does not create a transaction or consistency
-boundary across independent memory systems.
+- one automatic memory authority;
+- protection from duplicate writes and duplicate recall;
+- retry after a partial failure;
+- one logical ID that maps to both backends;
+- coordinated deletion;
+- a durable record of pending work;
+- an environment-isolation check.
+
+That can be acceptable for experimentation. It is harder to operate unattended.
 
 ## What the router adds
 
-The router presents one Hermes memory provider and one compact tool surface.
-It applies policy before the model sees or writes memory.
+### Hindsight remains the main memory
 
-### One authority for automatic memory
+Normal completed turns, primary recall, and reflection go to Hindsight. The
+router does not dilute that role by querying both systems on every turn.
 
-Hindsight owns normal automatic retention, recall, and reflection. Mnemosyne is
-not queried unless Hindsight is empty or unavailable and fallback is enabled.
-This avoids automatic result merging and duplicate prompt injection.
+### Mnemosyne becomes a checkpoint ledger
 
-### Evidence-backed checkpointing
+Only deliberate milestones are written to Mnemosyne. Examples include a tested
+release, a migration result, a confirmed root cause, or a rollback point.
 
-Mnemosyne receives only explicit checkpoints with a verification level and
-supporting evidence. It becomes a compact recovery ledger rather than another
-copy of every conversation.
+### Writes survive restarts
 
-### Durable outbox
+The router saves work in SQLite before contacting a backend. A failed delivery
+is still there after Hermes restarts and can be retried.
 
-Backend writes happen through a SQLite outbox. A failed Hindsight or Mnemosyne
-write remains visible and retryable after the Hermes process restarts.
+### One ID controls both copies
 
-### Logical IDs and coordinated deletion
+The router maps one `mr_...` ID to the Hindsight document ID and the Mnemosyne
+memory ID. That mapping is used for status, retry, and deletion.
 
-Each router record has one `mr_...` identifier. The router maps that logical ID
-to the Hindsight document ID and Mnemosyne memory ID. Forgetting the logical
-record schedules deletion from every backend that accepted it.
+### Delete races are handled
 
-### Race protection
+If a pending write is forgotten, it is cancelled. If the write was already in
+flight and finishes late, the receipt creates a follow-up delete.
 
-Pending retains are cancelled when forget is requested. When a retain finishes
-at the same time as forget, the successful receipt automatically creates a
-delete delivery so the forgotten record is not resurrected.
+### The prompt stays smaller
 
-### Environment policy
+Hermes sees a small router tool set. It does not receive every Hindsight and
+Mnemosyne administration tool or a merged recall result on each turn.
 
-Namespace and environment are part of the router's uniqueness boundary. The
-recommended deployment additionally uses different Hindsight banks,
-Mnemosyne banks, SQLite databases, hosts, and credentials.
+## When Hindsight alone is better
 
-## When direct Hindsight is better
+Use Hindsight directly when you want the simplest setup and do not need a second
+checkpoint store, coordinated deletion, or the router's outbox.
 
-Use Hindsight alone when:
+## When Mnemosyne alone is better
 
-- you want the simplest supported Hermes setup;
-- Hindsight is sufficient as the only memory authority;
-- you do not need an independent checkpoint ledger;
-- you do not need coordinated cross-backend deletion or retry;
-- lower component count matters more than redundancy.
-
-## When direct Mnemosyne is better
-
-Use Mnemosyne alone when:
-
-- you want one local SQLite database;
-- zero external service dependencies are the priority;
-- MCP support across many coding clients is more important than Hindsight's
-  deeper reflection and entity/temporal processing;
-- you want the lowest operational overhead.
+Use Mnemosyne directly when a local SQLite memory and broad MCP access matter
+more than Hindsight's extraction and reflection features.
 
 ## When both MCP servers are better
 
-Expose both MCP servers directly when:
+Use both directly when the goal is hands-on experimentation and a person will
+review every memory action.
 
-- a human is supervising every memory operation;
-- experimentation is the goal;
-- duplicate writes and manual cleanup are acceptable;
-- there is no requirement for atomic logical records or automatic retries.
+## When the router is a good fit
 
-## When the router is better
-
-Use the router when:
-
-- Hindsight should remain the automatic intelligence layer;
-- Mnemosyne should be an independently searchable checkpoint ledger;
-- partial backend failures must survive restarts;
-- one logical delete must reach every backend;
-- prompt and tool-schema duplication must be controlled;
-- staging and production require explicit memory policy.
-
-The router's value is policy, consistency, recovery, and observability—not a
-claim that two memory engines are always better than one.
+Use the router when Hindsight should stay automatic, Mnemosyne should preserve
+important checkpoints, and failed writes or deletes must remain visible until
+they finish.

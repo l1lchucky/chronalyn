@@ -48,3 +48,37 @@ def test_complete_after_forget_schedules_delete(tmp_path):
     assert states["hindsight:retain"] == "complete"
     assert states["hindsight:delete"] == "pending"
     store.close()
+
+
+def test_future_database_schema_is_rejected(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "router.db"
+    connection = sqlite3.connect(path)
+    connection.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    connection.execute("INSERT INTO schema_meta(key, value) VALUES('version', '999')")
+    connection.commit()
+    connection.close()
+    with pytest.raises(Exception, match="newer than supported"):
+        RouterStore(path)
+
+
+def test_deletion_plan_and_schedule_are_atomic(tmp_path, monkeypatch):
+    store = RouterStore(tmp_path / "router.db")
+    record_id = make(store)
+    token = store.create_deletion_plan(record_id)
+
+    original = store._schedule_delete_conn
+
+    def fail_after_token(*args, **kwargs):
+        raise RuntimeError("controlled schedule failure")
+
+    monkeypatch.setattr(store, "_schedule_delete_conn", fail_after_token)
+    with pytest.raises(RuntimeError):
+        store.apply_deletion_plan(record_id, token)
+
+    # Transaction rollback keeps the token reusable.
+    monkeypatch.setattr(store, "_schedule_delete_conn", original)
+    store.apply_deletion_plan(record_id, token)
+    assert store.record(record_id)["deleted"] == 1
+    store.close()
