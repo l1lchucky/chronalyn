@@ -38,7 +38,8 @@ jobs:
             install-dual.sh \
             hermes-memory-router.spdx.json \
             > SHA256SUMS-hermes-memory-router-0.2.0-beta.1.txt
-      - uses: actions/attest-build-provenance@v2
+      - name: Generate build provenance
+        uses: actions/attest@v4
         with:
           subject-path: "dist/*"
       - uses: actions/upload-artifact@v4
@@ -49,3 +50,4 @@ jobs:
         with:
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: dist/*
+
