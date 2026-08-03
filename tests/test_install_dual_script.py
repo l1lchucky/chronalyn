@@ -22,4 +22,4 @@ def test_release_workflow_publishes_installer_and_checksums():
     workflow = Path(".github/workflows/release.yml").read_text()
     assert "cp scripts/install-dual.sh dist/install-dual.sh" in workflow
     assert "SHA256SUMS-hermes-memory-router-0.2.0-beta.1.txt" in workflow
-    assert "actions/attest-build-provenance@v2" in workflow
+    assert "actions/attest@v4" in workflow
