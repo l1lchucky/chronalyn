@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[test]"
+      - run: python -m compileall -q src tests __init__.py
+      - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/live-smoke-test.sh
+      - run: pytest --cov --cov-report=term-missing
+      - run: python -m build
+      - name: Smoke-test built wheel
+        shell: bash
+        run: |
+          python -m venv /tmp/hmr-wheel-test
+          /tmp/hmr-wheel-test/bin/pip install --no-deps dist/*.whl
+          /tmp/hmr-wheel-test/bin/hermes-memory-router \
+            --hermes-home /tmp/hmr-home \
+            init --namespace ci-project --environment staging
+          /tmp/hmr-wheel-test/bin/hermes-memory-router \
+            --hermes-home /tmp/hmr-home validate
+          /tmp/hmr-wheel-test/bin/hermes-memory-router \
+            --hermes-home /tmp/hmr-home install-plugin
+          test -f /tmp/hmr-home/plugins/memory/hermes_memory_router/__init__.py
+          test -f /tmp/hmr-home/plugins/memory/hermes_memory_router/plugin.yaml
+      - run: python -m pip check

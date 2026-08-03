@@ -1,0 +1,52 @@
+{
+  "namespace": "my-project",
+  "environment": "staging",
+  "state_db": "",
+  "primary_backend": "hindsight",
+  "checkpoint_backend": "mnemosyne",
+  "hindsight": {
+    "api_url": "http://127.0.0.1:8888",
+    "api_key_env": "HINDSIGHT_API_KEY",
+    "bank_id": "my-project-staging",
+    "timeout_seconds": 15.0,
+    "recall_budget": "mid",
+    "recall_max_tokens": 1600,
+    "recall_types": [
+      "observation"
+    ],
+    "tags": [
+      "project:my-project",
+      "environment:staging"
+    ],
+    "verify_tls": true
+  },
+  "mnemosyne": {
+    "bank": "my-project-staging-checkpoints",
+    "data_dir": "",
+    "top_k": 5
+  },
+  "redaction": {
+    "mode": "redact",
+    "replacement": "[REDACTED]",
+    "max_record_chars": 24000,
+    "custom_patterns": []
+  },
+  "routing": {
+    "recall_policy": "primary_then_fallback",
+    "automatic_write_policy": "primary_only",
+    "checkpoint_write_policy": "primary_and_checkpoint",
+    "fallback_on_empty": true,
+    "fallback_on_error": true,
+    "fallback_max_chars": 4000,
+    "automatic_write_contexts": [
+      "primary"
+    ],
+    "include_tool_messages": false,
+    "start_worker": true,
+    "worker_poll_seconds": 1.0,
+    "worker_batch_size": 20,
+    "retry_base_seconds": 5.0,
+    "retry_max_seconds": 3600.0,
+    "max_attempts": 0
+  }
+}

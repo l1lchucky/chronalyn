@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+.venv/
+.env
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+
+# Local release/test evidence
+*-results.txt
+release-audit.json
+MANIFEST.json
