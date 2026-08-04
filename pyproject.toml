@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chronalyn"
 version = "1.0.0rc1"
-description = "Chronalyn — persistent engineering-intelligence layer for AI agents; RC1 delivers Hindsight-first memory orchestration for Hermes Agent"
+description = "Policy-enforced AI agent memory orchestration for Hermes Agent using Hindsight, Mnemosyne checkpoints, and durable SQLite delivery."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -15,15 +15,36 @@ authors = [
 maintainers = [
   {name = "Chucky"}
 ]
-keywords = ["chronalyn", "hermes-agent", "memory", "hindsight", "mnemosyne", "agent-memory"]
+keywords = [
+  "chronalyn",
+  "hermes-agent",
+  "nousresearch",
+  "ai-agent",
+  "ai-agent-memory",
+  "agent-memory",
+  "llm-memory",
+  "memory-provider",
+  "memory-orchestration",
+  "persistent-memory",
+  "durable-memory",
+  "hindsight",
+  "mnemosyne",
+  "checkpointing",
+  "sqlite",
+  "python",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Utilities",
 ]
 dependencies = []
 
@@ -64,6 +85,10 @@ Homepage = "https://github.com/l1lchucky/hermes-memory-router"
 Repository = "https://github.com/l1lchucky/hermes-memory-router"
 Issues = "https://github.com/l1lchucky/hermes-memory-router/issues"
 Changelog = "https://github.com/l1lchucky/hermes-memory-router/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/installation.md"
+"Migration Guide" = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/migration.md"
+Compatibility = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/compatibility.md"
+"Live Validation" = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/live-validation.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

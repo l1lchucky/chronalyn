@@ -4,8 +4,10 @@
 [![Security](https://github.com/l1lchucky/hermes-memory-router/actions/workflows/security.yml/badge.svg)](https://github.com/l1lchucky/hermes-memory-router/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Chronalyn is a persistent engineering-intelligence layer for AI agents and
-software teams.
+Chronalyn is an open-source AI agent memory orchestration layer and memory
+provider for Hermes Agent. It coordinates Hindsight for persistent memory,
+recall, and reflection with Mnemosyne for verified checkpoints and bounded
+fallback, backed by durable SQLite delivery, retry, and deletion controls.
 
 **What is implemented today:** this release candidate delivers one thing —
 reliable memory orchestration for Hermes Agent, shipped as **Chronalyn for

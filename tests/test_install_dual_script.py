@@ -1,6 +1,9 @@
 import re
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from chronalyn import identity
 
@@ -83,8 +86,20 @@ def test_uninstaller_separates_package_removal_from_data_deletion():
 
 
 def test_uninstaller_does_not_claim_removal_without_hermes_python(tmp_path: Path) -> None:
-    result = subprocess.run(
-        ["bash", "scripts/uninstall.sh"],  # noqa: S607 -- exercises the repository script.
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("Bash is required to exercise the POSIX uninstaller")
+
+    state = tmp_path / identity.STATE_DIRNAME
+    state.mkdir()
+    database = state / identity.STATE_DB_FILENAME
+    database.write_bytes(b"durable-router-state")
+    hindsight = tmp_path / "hindsight" / "config.json"
+    hindsight.parent.mkdir()
+    hindsight.write_text('{"bank_id": "keep-me"}', encoding="utf-8")
+
+    result = subprocess.run(  # noqa: S603 -- executes the resolved trusted Bash binary.
+        [bash, "scripts/uninstall.sh"],
         capture_output=True,
         check=False,
         env={"HOME": str(tmp_path), "HERMES_HOME": str(tmp_path), "PATH": ""},
@@ -94,6 +109,8 @@ def test_uninstaller_does_not_claim_removal_without_hermes_python(tmp_path: Path
     assert result.returncode == 0
     assert "Could not locate a Hermes Python environment" in result.stderr
     assert "Removed Chronalyn package and Hermes provider entries." not in result.stdout
+    assert database.read_bytes() == b"durable-router-state"
+    assert hindsight.read_text(encoding="utf-8") == '{"bank_id": "keep-me"}'
 
 
 def test_smoke_test_uses_the_new_command():
