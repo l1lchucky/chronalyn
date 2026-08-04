@@ -7,8 +7,8 @@ support plan.
 Before reporting a bug, include sanitized output from:
 
 ```bash
-hermes-memory-router validate
-hermes-memory-router status
+chronalyn validate
+chronalyn status
 python --version
 ```
 

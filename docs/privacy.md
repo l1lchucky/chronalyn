@@ -1,6 +1,6 @@
 # Privacy
 
-Hermes Memory Router is self-hosted software. The project maintainer does not
+Chronalyn is self-hosted software. The project maintainer does not
 receive your memories, configuration, or usage data.
 
 ## What the router stores

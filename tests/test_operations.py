@@ -5,15 +5,15 @@ from dataclasses import replace
 
 import pytest
 
-from hermes_memory_router.compatibility import HermesDiscovery
-from hermes_memory_router.exceptions import ConfigurationError
-from hermes_memory_router.operations import (
+from chronalyn.compatibility import HermesDiscovery
+from chronalyn.exceptions import ConfigurationError
+from chronalyn.operations import (
     build_plan,
     confirm,
     recommended_policy,
     require_cloud_approval,
 )
-from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
+from chronalyn.policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
 
 
 def state(**changes):
@@ -30,7 +30,7 @@ def state(**changes):
         hindsight_config_path="/tmp/home/hindsight/config.json",
         hindsight_config_exists=True,
         hindsight_api_url="http://127.0.0.1:8888",
-        hindsight_bank_id="syncost-staging",
+        hindsight_bank_id="acme-staging",
         hindsight_mode="local_external",
         hindsight_is_cloud=False,
         hindsight_is_remote=False,
@@ -51,7 +51,7 @@ def test_plan_matches_strict_user_visible_flow():
     plan = build_plan(state(mnemosyne_installed=True), policy=HINDSIGHT_MNEMOSYNE)
     rendered = plan.render()
     assert "Active Hermes provider: hindsight" in rendered
-    assert "Hindsight bank: syncost-staging" in rendered
+    assert "Hindsight bank: acme-staging" in rendered
     assert "Primary backend: hindsight" in rendered
     assert "Checkpoint backend: mnemosyne" in rendered
     assert "Existing Hindsight memories:\n  Preserved" in rendered

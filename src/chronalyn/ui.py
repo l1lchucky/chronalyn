@@ -7,12 +7,23 @@ from contextlib import AbstractContextManager
 from types import TracebackType
 from typing import TextIO
 
+#: Environment variables that suppress the animation. ``HMR_NO_ANIMATION`` is the
+#: pre-rename name and is still honoured so existing scripts keep working.
+ANIMATION_DISABLE_ENV_VARS = ("CHRONALYN_NO_ANIMATION", "HMR_NO_ANIMATION")
+_TRUTHY = frozenset({"1", "true", "yes"})
+
+
+def _animation_disabled_by_env() -> bool:
+    return any(
+        os.environ.get(name, "").strip().lower() in _TRUTHY for name in ANIMATION_DISABLE_ENV_VARS
+    )
+
 
 class PacmanLoader(AbstractContextManager["PacmanLoader"]):
     """Small dependency-free Pac-Man loading indicator.
 
     It stays quiet for redirected output, CI, JSON mode, tests, and when
-    HMR_NO_ANIMATION=1 is set.
+    CHRONALYN_NO_ANIMATION=1 (or the legacy HMR_NO_ANIMATION=1) is set.
     """
 
     _frames = (
@@ -36,7 +47,7 @@ class PacmanLoader(AbstractContextManager["PacmanLoader"]):
         automatic = bool(
             getattr(self.stream, "isatty", lambda: False)()
             and not os.environ.get("CI")
-            and os.environ.get("HMR_NO_ANIMATION", "").lower() not in {"1", "true", "yes"}
+            and not _animation_disabled_by_env()
             and os.environ.get("TERM", "") != "dumb"
         )
         self.enabled = automatic if enabled is None else enabled
@@ -51,11 +62,13 @@ class PacmanLoader(AbstractContextManager["PacmanLoader"]):
 
     def _animate(self) -> None:
         index = 0
-        while not self._stop.wait(self.interval):
+        while not self._stop.is_set():
             frame = self._frames[index % len(self._frames)]
-            self.stream.write(f"\r\x1b[2K{frame}  {self.label}")
+            self.stream.write(chr(13) + f"\x1b[2K{frame}  {self.label}")
             self.stream.flush()
             index += 1
+            if self._stop.wait(self.interval):
+                break
 
     def stop(self, final: str | None = None) -> None:
         if not self.enabled:

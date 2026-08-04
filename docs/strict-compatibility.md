@@ -9,7 +9,7 @@ Hermes should have one active external provider:
 
 ```yaml
 memory:
-  provider: hermes_memory_router
+  provider: chronalyn
 ```
 
 Hindsight and Mnemosyne are internal router backends. Do not also list them as

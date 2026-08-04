@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from hermes_memory_router.config import load_config, write_default_config
-from hermes_memory_router.exceptions import ConfigurationError
+from chronalyn.config import load_config, write_default_config
+from chronalyn.exceptions import ConfigurationError
 
 
 def test_default_config_isolated(tmp_path):

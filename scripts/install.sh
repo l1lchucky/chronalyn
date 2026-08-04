@@ -47,20 +47,24 @@ else
   exit 2
 fi
 
-"$hermes_python" -m hermes_memory_router.cli \
+"$hermes_python" -m chronalyn.cli \
   --hermes-home "$hermes_home" --no-animation install-plugin
 
 hermes_command="$(command -v hermes 2>/dev/null || true)"
-router_entry="$(dirname "$hermes_python")/hermes-memory-router"
-if [ -n "$hermes_command" ] && [ -x "$router_entry" ]; then
-  destination="$(dirname "$hermes_command")/hermes-memory-router"
-  if [ ! -e "$destination" ] || [ -L "$destination" ]; then
-    ln -sfn "$router_entry" "$destination"
+# Link both the new command and the deprecated alias when they exist.
+for command_name in chronalyn hermes-memory-router; do
+  router_entry="$(dirname "$hermes_python")/$command_name"
+  if [ -n "$hermes_command" ] && [ -x "$router_entry" ]; then
+    destination="$(dirname "$hermes_command")/$command_name"
+    if [ ! -e "$destination" ] || [ -L "$destination" ]; then
+      ln -sfn "$router_entry" "$destination"
+    fi
   fi
-fi
+done
 
-echo "Installed Hermes Memory Router into: $hermes_python"
-echo "Plugin entry: $hermes_home/plugins/memory/hermes_memory_router"
+echo "Installed Chronalyn into: $hermes_python"
+echo "Provider entry: $hermes_home/plugins/chronalyn"
+echo "Compatibility entry: $hermes_home/plugins/hermes_memory_router"
 echo
 echo "Next:"
-echo "  hermes-memory-router setup-dual"
+echo "  chronalyn setup"

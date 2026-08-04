@@ -14,16 +14,15 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import identity
 from .exceptions import ConfigurationError
 
-OFFICIAL_HERMES_INSTALLER = "https://hermes-agent.nousresearch.com/install.sh"
-ROUTER_VERSION = "0.2.0b1"
-ROUTER_TAG = "v0.2.0-beta.1"
-ROUTER_WHEEL = "hermes_memory_router-0.2.0b1-py3-none-any.whl"
-ROUTER_RELEASE_BASE = (
-    f"https://github.com/l1lchucky/hermes-memory-router/releases/download/{ROUTER_TAG}"
-)
-MNEMOSYNE_SPEC = "mnemosyne-memory>=3.15,<4"
+OFFICIAL_HERMES_INSTALLER = identity.OFFICIAL_HERMES_INSTALLER
+ROUTER_VERSION = identity.VERSION
+ROUTER_TAG = identity.RELEASE_TAG
+ROUTER_WHEEL = identity.WHEEL
+ROUTER_RELEASE_BASE = identity.RELEASE_BASE
+MNEMOSYNE_SPEC = identity.MNEMOSYNE_SPEC
 
 LogCallback = Callable[[str], None]
 
@@ -78,7 +77,7 @@ def download_https(
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(  # noqa: S310 - HTTPS required above
         url,
-        headers={"User-Agent": f"hermes-memory-router/{ROUTER_VERSION}"},
+        headers={"User-Agent": identity.USER_AGENT},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
@@ -350,13 +349,22 @@ def install_router_into_runtime(
     run_command(command, log=log, timeout=1200)
 
 
-def link_router_command(runtime: HermesRuntime) -> Path:
-    source = Path(runtime.python).parent / "hermes-memory-router"
+def link_router_command(
+    runtime: HermesRuntime,
+    *,
+    command_name: str = identity.CLI_COMMAND,
+) -> Path:
+    """Expose a console command installed in Hermes' venv on the Hermes PATH.
+
+    Defaults to the ``chronalyn`` command. Pass ``command_name`` to also link the
+    deprecated ``hermes-memory-router`` alias.
+    """
+    source = Path(runtime.python).parent / command_name
     if not source.is_file():
         raise ConfigurationError(
-            f"Router console entry was not installed in Hermes runtime: {source}"
+            f"Console entry {command_name!r} was not installed in Hermes runtime: {source}"
         )
-    destination = Path(runtime.command).parent / "hermes-memory-router"
+    destination = Path(runtime.command).parent / command_name
     if destination.exists() or destination.is_symlink():
         try:
             if destination.resolve() == source.resolve():
@@ -384,7 +392,7 @@ def install_plugin_entry(
         [
             runtime.python,
             "-m",
-            "hermes_memory_router.cli",
+            "chronalyn.cli",
             "--hermes-home",
             str(hermes_home),
             "--no-animation",
@@ -408,7 +416,7 @@ def verify_router_in_runtime(
     command = [
         runtime.python,
         "-m",
-        "hermes_memory_router.cli",
+        "chronalyn.cli",
         "--hermes-home",
         str(hermes_home),
         "--json",

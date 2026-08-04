@@ -3,9 +3,9 @@ requires = ["setuptools>=75", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hermes-memory-router"
-version = "0.2.0b1"
-description = "A careful Hindsight and Mnemosyne memory policy for Hermes Agent"
+name = "chronalyn"
+version = "1.0.0rc1"
+description = "Policy-enforced AI agent memory orchestration for Hermes Agent using Hindsight, Mnemosyne checkpoints, and durable SQLite delivery."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -15,15 +15,36 @@ authors = [
 maintainers = [
   {name = "Chucky"}
 ]
-keywords = ["hermes-agent", "memory", "hindsight", "mnemosyne", "agent-memory"]
+keywords = [
+  "chronalyn",
+  "hermes-agent",
+  "nousresearch",
+  "ai-agent",
+  "ai-agent-memory",
+  "agent-memory",
+  "llm-memory",
+  "memory-provider",
+  "memory-orchestration",
+  "persistent-memory",
+  "durable-memory",
+  "hindsight",
+  "mnemosyne",
+  "checkpointing",
+  "sqlite",
+  "python",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Utilities",
 ]
 dependencies = []
 
@@ -54,19 +75,23 @@ dev = [
 ]
 
 [project.scripts]
-hermes-memory-router = "hermes_memory_router.cli:main"
+chronalyn = "chronalyn.cli:main"
+# Temporary compatibility alias. Invokes Chronalyn and prints a deprecation
+# warning to stderr. Scheduled for removal in a future major release.
+hermes-memory-router = "chronalyn.compat_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/l1lchucky/hermes-memory-router"
 Repository = "https://github.com/l1lchucky/hermes-memory-router"
 Issues = "https://github.com/l1lchucky/hermes-memory-router/issues"
 Changelog = "https://github.com/l1lchucky/hermes-memory-router/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/installation.md"
+"Migration Guide" = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/migration.md"
+Compatibility = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/compatibility.md"
+"Live Validation" = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/live-validation.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-hermes_memory_router = ["resources/*.yaml", "resources/*.txt"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
@@ -74,14 +99,14 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["hermes_memory_router"]
+source = ["chronalyn"]
 omit = [
-  "src/hermes_memory_router/cli.py",
-  "src/hermes_memory_router/factory.py",
-  "src/hermes_memory_router/provider.py",
-  "src/hermes_memory_router/adapters/mnemosyne.py",
-  "src/hermes_memory_router/bootstrap.py",
-  "src/hermes_memory_router/setup_tui.py",
+  "src/chronalyn/cli.py",
+  "src/chronalyn/factory.py",
+  "src/chronalyn/provider.py",
+  "src/chronalyn/adapters/mnemosyne.py",
+  "src/chronalyn/bootstrap.py",
+  "src/chronalyn/setup_tui.py",
 ]
 
 [tool.coverage.report]
@@ -104,7 +129,7 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*.py" = ["S108"]  # Fixed fake POSIX paths; tests do not write there.
-"src/hermes_memory_router/setup_tui.py" = [
+"src/chronalyn/setup_tui.py" = [
   "E501", "F841", "RUF059", "S110", "SIM102", "SIM105",
 ] # Interactive curses boundary; formatting remains enforced.
 
@@ -112,6 +137,6 @@ ignore = ["S101"]
 python_version = "3.11"
 strict = true
 explicit_package_bases = true
-packages = ["hermes_memory_router"]
+packages = ["chronalyn", "hermes_memory_router"]
 mypy_path = "src"
 warn_unused_ignores = true

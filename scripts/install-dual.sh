@@ -2,13 +2,13 @@
 set -euo pipefail
 umask 077
 
-VERSION="0.2.0-beta.1"
-PY_VERSION="0.2.0b1"
+VERSION="1.0.0-rc.1"
+PY_VERSION="1.0.0rc1"
 TAG="v${VERSION}"
 REPO="l1lchucky/hermes-memory-router"
-WHEEL="hermes_memory_router-${PY_VERSION}-py3-none-any.whl"
+WHEEL="chronalyn-${PY_VERSION}-py3-none-any.whl"
 RELEASE_BASE="https://github.com/${REPO}/releases/download/${TAG}"
-CHECKSUMS="SHA256SUMS-hermes-memory-router-${VERSION}.txt"
+CHECKSUMS="SHA256SUMS-chronalyn-${TAG}.txt"
 HERMES_INSTALLER_URL="https://hermes-agent.nousresearch.com/install.sh"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 ALLOW_ROOT=false
@@ -19,7 +19,7 @@ KEEP_DOWNLOADS=false
 
 usage() {
   cat <<EOF
-Dual Memory Router ${VERSION} installer
+Chronalyn ${VERSION} installer (Chronalyn for Hermes)
 
 Usage: $0 [options]
 
@@ -78,8 +78,8 @@ line() { printf '%*s\n' 72 '' | tr ' ' '─'; }
 header() {
   clear 2>/dev/null || true
   line
-  printf '  DUAL MEMORY ROUTER // STRICT SETUP %s\n' "$VERSION"
-  printf '  HINDSIGHT PRIMARY + MNEMOSYNE CHECKPOINTS\n'
+  printf '  CHRONALYN // STRICT SETUP %s\n' "$VERSION"
+  printf '  DUAL MEMORY ROUTER: HINDSIGHT PRIMARY + MNEMOSYNE CHECKPOINTS\n'
   line
 }
 
@@ -327,14 +327,14 @@ pacman_run "Prepare lightweight setup interface" "$TEMP_DIR/setup-ui-install.log
   install_temporary_ui "$BOOTSTRAP_PYTHON" "$SETUP_SITE" "$ROUTER_WHEEL_PATH"
 
 TUI_ARGS=(
-  "$BOOTSTRAP_PYTHON" -m hermes_memory_router.cli
+  "$BOOTSTRAP_PYTHON" -m chronalyn.cli
   --hermes-home "$HERMES_HOME"
-  setup-dual --package-source "$ROUTER_WHEEL_PATH"
+  setup --package-source "$ROUTER_WHEEL_PATH"
 )
 if [ "$MOUSE" != true ]; then TUI_ARGS+=(--no-mouse); fi
 if [ "$WITH_BROWSER" = true ]; then TUI_ARGS+=(--with-browser); fi
 
-printf '\nLaunching the full Dual Memory Router interface...\n'
+printf '\nLaunching the full Chronalyn setup interface...\n'
 (
   cd "$TEMP_DIR"
   PYTHONPATH="$SETUP_SITE" PYTHONNOUSERSITE=1 PYTHONSAFEPATH=1 \

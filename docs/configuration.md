@@ -7,7 +7,7 @@ $HERMES_HOME/memory-router/config.json
 ```
 
 The guided setup writes this file. Manual editing is supported, but run
-`hermes-memory-router validate` afterward.
+`chronalyn validate` afterward.
 
 ## Identity
 

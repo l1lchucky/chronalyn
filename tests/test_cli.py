@@ -1,8 +1,8 @@
 import json
 
-from hermes_memory_router.cli import main
-from hermes_memory_router.compatibility import profile_fingerprint
-from hermes_memory_router.store import RouterStore
+from chronalyn.cli import main
+from chronalyn.compatibility import profile_fingerprint
+from chronalyn.store import RouterStore
 
 
 def test_cli_init_validate_and_plugin_lifecycle(tmp_path, capsys):
@@ -26,12 +26,15 @@ def test_cli_init_validate_and_plugin_lifecycle(tmp_path, capsys):
     assert '"namespace": "project"' in capsys.readouterr().out
 
     assert main(["--hermes-home", str(tmp_path), "install-plugin"]) == 0
-    plugin = tmp_path / "plugins/memory/hermes_memory_router"
+    # Hermes discovers user providers at $HERMES_HOME/plugins/<provider-id>/.
+    plugin = tmp_path / "plugins" / "chronalyn"
     assert (plugin / "__init__.py").exists()
     assert (plugin / "plugin.yaml").exists()
 
     assert main(["--hermes-home", str(tmp_path), "uninstall-plugin"]) == 0
     assert not plugin.exists()
+    # Uninstalling the plugin entry must never remove router configuration.
+    assert (tmp_path / "memory-router/config.json").exists()
 
 
 def test_cli_init_refuses_overwrite(tmp_path):

@@ -3,7 +3,7 @@
 ## Before every upgrade
 
 1. Record the router, Hermes, Hindsight, Mnemosyne, and Python versions.
-2. Run `hermes-memory-router status`.
+2. Run `chronalyn status`.
 3. Drain failed and dead deliveries.
 4. Back up all memory stores and the Hermes profile.
 5. Upgrade staging first.
@@ -15,7 +15,7 @@
 The 0.2 loader can read a 0.1 configuration. Persist the new schema with:
 
 ```bash
-hermes-memory-router upgrade-config --yes
+chronalyn upgrade-config --yes
 ```
 
 The command creates a timestamped backup before writing schema version 2. The
@@ -25,7 +25,7 @@ old dual behavior becomes the fixed
 ## Roll back configuration
 
 ```bash
-hermes-memory-router rollback --yes
+chronalyn rollback --yes
 ```
 
 This restores the latest router configuration backup, including removal of a

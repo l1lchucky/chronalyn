@@ -4,9 +4,9 @@ import urllib.error
 
 import pytest
 
-from hermes_memory_router.adapters.hindsight import HindsightBackend
-from hermes_memory_router.config import HindsightConfig
-from hermes_memory_router.exceptions import BackendOperationError
+from chronalyn.adapters.hindsight import HindsightBackend
+from chronalyn.config import HindsightConfig
+from chronalyn.exceptions import BackendOperationError
 
 
 class Response:

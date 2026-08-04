@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from hermes_memory_router.exceptions import ConfigurationError
-from hermes_memory_router.store import RouterStore
+from chronalyn.exceptions import ConfigurationError
+from chronalyn.store import RouterStore
 
 
 def test_store_binding_reopens_with_same_identity(tmp_path):

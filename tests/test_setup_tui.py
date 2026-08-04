@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hermes_memory_router.setup_tui import (
+from chronalyn.setup_tui import (
     DualSetupApp,
     DualSetupState,
     MenuLayout,
@@ -49,7 +49,7 @@ def test_wrapping_preserves_blank_lines():
 
 
 def test_acknowledgements_explain_local_and_remote_transmission():
-    from hermes_memory_router.setup_tui import acknowledgement_items
+    from chronalyn.setup_tui import acknowledgement_items
 
     local = DualSetupState(Path("/tmp/local"), hindsight_api_url="http://127.0.0.1:8888")
     remote = DualSetupState(

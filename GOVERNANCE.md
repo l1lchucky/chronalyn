@@ -1,6 +1,6 @@
 # Governance
 
-Hermes Memory Router is maintainer-led.
+Chronalyn is maintainer-led.
 
 - Initial maintainer: `@l1lchucky`
 - Security-sensitive changes require maintainer review.

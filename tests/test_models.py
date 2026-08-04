@@ -1,4 +1,4 @@
-from hermes_memory_router.models import BackendReceipt, CheckpointResult, MemoryHit, RecallResult
+from chronalyn.models import BackendReceipt, CheckpointResult, MemoryHit, RecallResult
 
 
 def test_model_serialization():

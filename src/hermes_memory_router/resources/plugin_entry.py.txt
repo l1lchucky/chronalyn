@@ -1,2 +1,0 @@
-from hermes_memory_router.provider import HermesMemoryRouterProvider, register
-__all__ = ["HermesMemoryRouterProvider", "register"]

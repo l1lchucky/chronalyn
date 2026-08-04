@@ -20,8 +20,10 @@ else:
             pass
 
 
+from . import identity
 from .compatibility import require_strict_hermes_compatibility
 from .config import RouterConfig, load_config
+from .exceptions import ConfigurationError
 from .factory import build_router
 from .router import MemoryRouter
 from .tools import VERIFICATION_LEVELS, tool_schemas_for
@@ -33,8 +35,23 @@ def _json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-class HermesMemoryRouterProvider(MemoryProvider):
-    def __init__(self) -> None:
+class ChronalynMemoryProvider(MemoryProvider):
+    """Chronalyn's Hermes memory provider.
+
+    One implementation serves both the canonical ``chronalyn`` provider id and
+    the legacy ``hermes_memory_router`` id. Accepting the legacy id keeps an
+    existing Hermes configuration loadable; it does not change routing, storage,
+    namespaces, environments or any other durable identity.
+    """
+
+    def __init__(self, name: str | None = None) -> None:
+        provider_name = (name or identity.PROVIDER_ID).strip()
+        if not identity.is_provider_id(provider_name):
+            raise ConfigurationError(
+                f"Unsupported provider id {provider_name!r}; expected one of "
+                f"{', '.join(identity.PROVIDER_IDS)}"
+            )
+        self._name = provider_name
         self._router: MemoryRouter | None = None
         self._config: RouterConfig | None = None
         self._hermes_home: Path | None = None
@@ -44,7 +61,7 @@ class HermesMemoryRouterProvider(MemoryProvider):
 
     @property
     def name(self) -> str:
-        return "hermes_memory_router"
+        return self._name
 
     def is_available(self) -> bool:
         """Perform only local package/config checks; never make a network call."""
@@ -82,7 +99,7 @@ class HermesMemoryRouterProvider(MemoryProvider):
         if not self._config:
             return ""
         return (
-            "Hermes Memory Router policy\n"
+            f"{identity.BRAND} policy\n"
             f"Namespace: {self._config.namespace}\n"
             f"Environment: {self._config.environment}\n"
             f"Policy: {self._config.policy}\n"
@@ -269,11 +286,25 @@ class HermesMemoryRouterProvider(MemoryProvider):
 
         home = Path(hermes_home).expanduser()
         write_default_config(
-            home / "memory-router" / "config.json",
+            home / identity.STATE_DIRNAME / identity.CONFIG_FILENAME,
             namespace=str(values.get("namespace") or "my-project"),
             environment=str(values.get("environment") or "development"),
         )
 
 
+#: Deprecated alias kept so existing source imports keep working. Chronalyn was
+#: previously published as Hermes Memory Router; the class was renamed with the
+#: brand. This alias is temporary and will be removed in a future major release.
+HermesMemoryRouterProvider = ChronalynMemoryProvider
+
+
 def register(ctx: Any) -> None:
-    ctx.register_memory_provider(HermesMemoryRouterProvider())
+    """Register Chronalyn with Hermes' memory-provider discovery."""
+    ctx.register_memory_provider(ChronalynMemoryProvider())
+
+
+__all__ = [
+    "ChronalynMemoryProvider",
+    "HermesMemoryRouterProvider",
+    "register",
+]

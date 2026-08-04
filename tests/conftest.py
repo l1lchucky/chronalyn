@@ -4,12 +4,12 @@ from typing import Any
 
 import pytest
 
-from hermes_memory_router.adapters.base import MemoryBackend
-from hermes_memory_router.config import RouterConfig
-from hermes_memory_router.models import BackendReceipt, MemoryHit
-from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE
-from hermes_memory_router.router import MemoryRouter
-from hermes_memory_router.store import RouterStore
+from chronalyn.adapters.base import MemoryBackend
+from chronalyn.config import RouterConfig
+from chronalyn.models import BackendReceipt, MemoryHit
+from chronalyn.policy import HINDSIGHT_MNEMOSYNE
+from chronalyn.router import MemoryRouter
+from chronalyn.store import RouterStore
 
 
 class FakeBackend(MemoryBackend):

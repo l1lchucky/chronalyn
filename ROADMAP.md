@@ -4,7 +4,7 @@ This is a working plan, not a promise of dates or features. Priorities may move
 when upstream APIs change, testing uncovers a problem, or users report a better
 need.
 
-## 0.2.0-beta.1
+## 1.0.0-rc.1
 
 The beta focuses on being a well-behaved Hermes memory provider:
 

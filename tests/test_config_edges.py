@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from hermes_memory_router.config import RouterConfig, load_config
-from hermes_memory_router.exceptions import ConfigurationError
+from chronalyn.config import RouterConfig, load_config
+from chronalyn.exceptions import ConfigurationError
 
 
 @pytest.mark.parametrize(

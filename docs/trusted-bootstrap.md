@@ -8,7 +8,7 @@ terminal interface.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -fsSLo /tmp/install-hmr-dual.sh \
-  https://raw.githubusercontent.com/l1lchucky/hermes-memory-router/v0.2.0-beta.1/scripts/install-dual.sh \
+  https://raw.githubusercontent.com/l1lchucky/chronalyn/v1.0.0-rc.1/scripts/install-dual.sh \
   && bash /tmp/install-hmr-dual.sh
 ```
 
@@ -78,7 +78,7 @@ unless `--keep-downloads` is used.
 For offline review or an internal release mirror:
 
 ```bash
-./scripts/install-dual.sh --wheel /path/to/hermes_memory_router-0.2.0b1-py3-none-any.whl
+./scripts/install-dual.sh --wheel /path/to/chronalyn-1.0.0rc1-py3-none-any.whl
 ```
 
 Verify the wheel through your own release process before using this option.
