@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import logging
 import threading
 import time
@@ -7,6 +8,7 @@ from typing import Any
 
 from .adapters.base import MemoryBackend
 from .config import RouterConfig
+from .health import collect_health
 from .models import CheckpointResult, RecallResult
 from .policy import get_policy
 from .redaction import sanitize, sanitize_metadata
@@ -107,9 +109,7 @@ class MemoryRouter:
             "redaction_findings": sorted(
                 set(clean.findings + clean_context.findings + clean_metadata.findings)
             ),
-            "truncated": (
-                clean.truncated or clean_context.truncated or clean_metadata.truncated
-            ),
+            "truncated": (clean.truncated or clean_context.truncated or clean_metadata.truncated),
         }
         return self._record(
             kind="explicit",
@@ -134,16 +134,10 @@ class MemoryRouter:
             {
                 "verification_level": verification_level,
                 "redaction_findings": sorted(
-                    set(
-                        clean_content.findings
-                        + clean_evidence.findings
-                        + metadata_result.findings
-                    )
+                    set(clean_content.findings + clean_evidence.findings + metadata_result.findings)
                 ),
                 "truncated": (
-                    clean_content.truncated
-                    or clean_evidence.truncated
-                    or metadata_result.truncated
+                    clean_content.truncated or clean_evidence.truncated or metadata_result.truncated
                 ),
             }
         )
@@ -173,9 +167,7 @@ class MemoryRouter:
             evidence=evidence,
             metadata=metadata or {},
         )
-        backends = [
-            name for name in self.policy.checkpoint_backends if name in self.backends
-        ]
+        backends = [name for name in self.policy.checkpoint_backends if name in self.backends]
         return self._record(
             kind="checkpoint",
             content=body,
@@ -205,9 +197,7 @@ class MemoryRouter:
             "redaction_findings": sorted(
                 set(user.findings + assistant.findings + metadata_result.findings)
             ),
-            "truncated": (
-                user.truncated or assistant.truncated or metadata_result.truncated
-            ),
+            "truncated": (user.truncated or assistant.truncated or metadata_result.truncated),
         }
         result = self._record(
             kind="turn",
@@ -378,8 +368,18 @@ class MemoryRouter:
             error,
         )
 
-    def status(self) -> dict[str, Any]:
-        return {
+    def status(self, *, integrity: dict[str, Any] | None = None) -> dict[str, Any]:
+        backends = {name: backend.health() for name, backend in self.backends.items()}
+        mnemosyne_version = None
+        if self.checkpoint is not None:
+            try:
+                mnemosyne_version = importlib.metadata.version("mnemosyne-memory")
+            except importlib.metadata.PackageNotFoundError:
+                try:
+                    mnemosyne_version = importlib.metadata.version("mnemosyne")
+                except importlib.metadata.PackageNotFoundError:
+                    mnemosyne_version = None
+        base = {
             "namespace": self.config.namespace,
             "environment": self.config.environment,
             "policy": self.config.policy,
@@ -394,23 +394,40 @@ class MemoryRouter:
                 "merged_results": False,
             },
             "store": self.store.stats(),
-            "backends": {
-                name: backend.health() for name, backend in self.backends.items()
-            },
+            "backends": backends,
             "worker_alive": bool(self._worker and self._worker.is_alive()),
         }
+        health = collect_health(
+            config=self.config,
+            store=self.store,
+            expected_profile=str(self.store.stats()["binding"]["profile"] or ""),
+            backends=backends,
+            worker_alive=(
+                bool(self._worker and self._worker.is_alive())
+                if self.config.routing.start_worker
+                else True
+            ),
+            optional_mnemosyne={
+                "enabled": self.checkpoint is not None,
+                "installed": self.checkpoint is not None,
+                "version": mnemosyne_version,
+            },
+            integrity=integrity,
+        )
+        return {**base, **health, "health": health}
 
-    def close(self) -> None:
+    def close(self, *, flush: bool = True) -> None:
         self._stop.set()
         self._wake.set()
         if self._worker and self._worker.is_alive():
             self._worker.join(timeout=10)
-        try:
-            for _ in range(5):
-                if not self.drain_outbox():
-                    break
-        except Exception:
-            logger.exception("Final memory-router flush failed")
+        if flush:
+            try:
+                for _ in range(5):
+                    if not self.drain_outbox():
+                        break
+            except Exception:
+                logger.exception("Final memory-router flush failed")
         for backend in self.backends.values():
             try:
                 backend.close()

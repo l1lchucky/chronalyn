@@ -4,17 +4,19 @@ from hermes_memory_router.config import RedactionConfig
 from hermes_memory_router.exceptions import SecretDetected
 from hermes_memory_router.redaction import sanitize
 
-
 FAKE_BEARER = "-".join(("demo", "token", "not", "secret")) * 2
 
 
-@pytest.mark.parametrize("text,secret", [
-    ("Authorization: Bearer " + FAKE_BEARER, FAKE_BEARER),
-    ("API_KEY=super-secret-value", "super-secret-value"),
-    ("postgresql://user:pass@localhost/db", "user:pass@"),
-    ("eyJabcdefghij.abcdefghij.abcdefghij", "eyJabcdefghij"),
-    ("https://example.test/x?token=hello&safe=yes", "token=hello"),
-])
+@pytest.mark.parametrize(
+    "text,secret",
+    [
+        ("Authorization: Bearer " + FAKE_BEARER, FAKE_BEARER),
+        ("API_KEY=super-secret-value", "super-secret-value"),
+        ("postgresql://user:pass@localhost/db", "user:pass@"),
+        ("eyJabcdefghij.abcdefghij.abcdefghij", "eyJabcdefghij"),
+        ("https://example.test/x?token=hello&safe=yes", "token=hello"),
+    ],
+)
 def test_redacts_common_secrets(text, secret):
     result = sanitize(text, RedactionConfig())
     assert secret not in result.text

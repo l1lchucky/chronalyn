@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from conftest import FakeBackend
 from hermes_memory_router.config import new_config
 from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
 from hermes_memory_router.router import MemoryRouter
 from hermes_memory_router.store import RouterStore
-
-from conftest import FakeBackend
 
 
 def test_hindsight_only_policy_has_no_fallback(tmp_path):
@@ -26,9 +25,7 @@ def test_hindsight_only_policy_has_no_fallback(tmp_path):
         evidence="unit test",
     )
     router.drain_outbox(10)
-    assert router.store.delivery_states(result.record_id) == {
-        "hindsight:retain": "complete"
-    }
+    assert router.store.delivery_states(result.record_id) == {"hindsight:retain": "complete"}
     assert router.recall(query="missing").fallback_used is False
     router.close()
 

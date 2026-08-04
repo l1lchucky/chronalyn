@@ -43,7 +43,7 @@ class PacmanLoader(AbstractContextManager["PacmanLoader"]):
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def __enter__(self) -> "PacmanLoader":
+    def __enter__(self) -> PacmanLoader:
         if self.enabled:
             self._thread = threading.Thread(target=self._animate, daemon=True)
             self._thread.start()

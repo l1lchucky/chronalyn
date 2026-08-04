@@ -6,13 +6,13 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
 
 from .exceptions import ConfigurationError
 
@@ -21,8 +21,7 @@ ROUTER_VERSION = "0.2.0b1"
 ROUTER_TAG = "v0.2.0-beta.1"
 ROUTER_WHEEL = "hermes_memory_router-0.2.0b1-py3-none-any.whl"
 ROUTER_RELEASE_BASE = (
-    "https://github.com/l1lchucky/hermes-memory-router/releases/download/"
-    f"{ROUTER_TAG}"
+    f"https://github.com/l1lchucky/hermes-memory-router/releases/download/{ROUTER_TAG}"
 )
 MNEMOSYNE_SPEC = "mnemosyne-memory>=3.15,<4"
 
@@ -77,7 +76,7 @@ def download_https(
     if not url.startswith("https://"):
         raise ConfigurationError(f"Refusing non-HTTPS download: {url}")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - HTTPS required above
         url,
         headers={"User-Agent": f"hermes-memory-router/{ROUTER_VERSION}"},
     )
@@ -141,8 +140,7 @@ def validate_hermes_installer(path: Path) -> None:
     missing = [marker for marker in required if marker not in text]
     if missing:
         raise ConfigurationError(
-            "Official Hermes installer failed identity checks; missing: "
-            + ", ".join(missing)
+            "Official Hermes installer failed identity checks; missing: " + ", ".join(missing)
         )
 
 
@@ -150,15 +148,14 @@ def _candidate_hermes_commands(hermes_home: Path) -> Iterable[Path]:
     command = shutil.which("hermes")
     if command:
         yield Path(command)
-    for candidate in (
+    yield from (
         Path.home() / ".local" / "bin" / "hermes",
         Path("/usr/local/bin/hermes"),
         hermes_home / "bin" / "hermes",
         hermes_home / "hermes-agent" / "hermes",
         hermes_home / "hermes-agent" / ".venv" / "bin" / "hermes",
         hermes_home / "hermes-agent" / "venv" / "bin" / "hermes",
-    ):
-        yield candidate
+    )
 
 
 def _python_from_shebang(command: Path) -> Path | None:
@@ -231,7 +228,7 @@ def run_command(
     if log:
         log(f"$ {safe_display}")
     try:
-        process = subprocess.Popen(
+        process = subprocess.Popen(  # noqa: S603 - argv list, no shell
             command,
             cwd=str(cwd) if cwd else None,
             env=env,
@@ -281,9 +278,7 @@ def install_official_hermes(
     run_command(command, log=log, timeout=1800)
     runtime = find_hermes_runtime(hermes_home)
     if runtime is None:
-        raise ConfigurationError(
-            "Hermes installer completed but its runtime could not be located"
-        )
+        raise ConfigurationError("Hermes installer completed but its runtime could not be located")
     return runtime
 
 
@@ -300,7 +295,7 @@ def _pip_install_command(
     executable already installed with Hermes or present on PATH.
     """
 
-    probe = subprocess.run(
+    probe = subprocess.run(  # noqa: S603 - fixed interpreter argv
         [runtime.python, "-m", "pip", "--version"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -323,7 +318,11 @@ def _pip_install_command(
             ]
         )
     uv = next(
-        (candidate for candidate in candidates if candidate.is_file() and os.access(candidate, os.X_OK)),
+        (
+            candidate
+            for candidate in candidates
+            if candidate.is_file() and os.access(candidate, os.X_OK)
+        ),
         None,
     )
     if uv is None:
@@ -351,7 +350,6 @@ def install_router_into_runtime(
     run_command(command, log=log, timeout=1200)
 
 
-
 def link_router_command(runtime: HermesRuntime) -> Path:
     source = Path(runtime.python).parent / "hermes-memory-router"
     if not source.is_file():
@@ -375,6 +373,7 @@ def link_router_command(runtime: HermesRuntime) -> Path:
     destination.symlink_to(source)
     return destination
 
+
 def install_plugin_entry(
     runtime: HermesRuntime,
     *,
@@ -394,8 +393,6 @@ def install_plugin_entry(
         log=log,
         timeout=60,
     )
-
-
 
 
 def verify_router_in_runtime(
@@ -419,7 +416,7 @@ def verify_router_in_runtime(
         "status",
     ]
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - fixed router argv
             command,
             capture_output=True,
             text=True,
@@ -433,15 +430,11 @@ def verify_router_in_runtime(
         raise ConfigurationError(f"Router runtime verification could not start: {exc}") from exc
     if result.returncode != 0:
         details = (result.stderr or result.stdout).strip()
-        raise ConfigurationError(
-            "Router runtime verification failed: " + details[:2000]
-        )
+        raise ConfigurationError("Router runtime verification failed: " + details[:2000])
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise ConfigurationError(
-            "Router runtime verification returned invalid JSON"
-        ) from exc
+        raise ConfigurationError("Router runtime verification returned invalid JSON") from exc
     if not isinstance(payload, dict):
         raise ConfigurationError("Router runtime verification returned an invalid payload")
     return payload
@@ -454,13 +447,13 @@ def write_secret_env(hermes_home: Path, updates: dict[str, str]) -> Path:
         if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", key):
             raise ConfigurationError(f"Invalid environment variable name: {key!r}")
         if any(character in value for character in ("\r", "\n", "\x00")):
-            raise ConfigurationError(f"Secret value for {key} contains a forbidden control character")
+            raise ConfigurationError(
+                f"Secret value for {key} contains a forbidden control character"
+            )
     existing: list[str] = []
     if path.exists():
-        try:
+        with suppress(OSError):
             path.chmod(0o600)
-        except OSError:
-            pass
         existing = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
     remaining = dict(updates)
     output: list[str] = []
@@ -476,10 +469,8 @@ def write_secret_env(hermes_home: Path, updates: dict[str, str]) -> Path:
     fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write("\n".join(output).rstrip() + "\n")
-    try:
+    with suppress(OSError):
         path.chmod(0o600)
-    except OSError:
-        pass
     return path
 
 
@@ -506,9 +497,7 @@ def write_hindsight_profile_config(
                 f"Cannot safely update existing Hindsight config {path}: {exc}"
             ) from exc
         if not isinstance(existing, dict):
-            raise ConfigurationError(
-                f"Existing Hindsight config must be a JSON object: {path}"
-            )
+            raise ConfigurationError(f"Existing Hindsight config must be a JSON object: {path}")
         payload.update(existing)
     # Preserve every unknown/advanced Hindsight setting. The router owns only
     # the connection, bank, and safe automatic-memory defaults below.
@@ -529,10 +518,8 @@ def write_hindsight_profile_config(
         }
     )
     if path.exists():
-        try:
+        with suppress(OSError):
             path.chmod(0o600)
-        except OSError:
-            pass
     fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2)

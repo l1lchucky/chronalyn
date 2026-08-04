@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
 import pytest
 
@@ -31,8 +30,7 @@ def test_validate_hermes_installer_identity(tmp_path):
         "#!/bin/bash\n"
         "# Hermes Agent Installer\n"
         "REPO=https://github.com/NousResearch/hermes-agent.git\n"
-        "HERMES_HOME=$HOME/.hermes\n"
-        + "# padding\n" * 2000
+        "HERMES_HOME=$HOME/.hermes\n" + "# padding\n" * 2000
     )
     valid.write_text(body)
     validate_hermes_installer(valid)
@@ -44,6 +42,8 @@ def test_validate_hermes_installer_identity(tmp_path):
 
 
 def test_find_hermes_runtime_from_shebang(tmp_path, monkeypatch):
+    if os.name == "nt":
+        pytest.skip("POSIX shebang executable discovery is not available on Windows")
     python = tmp_path / "venv/bin/python"
     python.parent.mkdir(parents=True)
     python.write_text("#!/bin/sh\n")
@@ -115,6 +115,8 @@ def test_runtime_install_commands_are_explicit(monkeypatch, tmp_path):
 
 
 def test_link_router_command_is_safe(tmp_path):
+    if os.name == "nt":
+        pytest.skip("Windows symlink creation requires an optional OS privilege")
     from hermes_memory_router.bootstrap import link_router_command
 
     runtime_bin = tmp_path / "runtime/bin"
@@ -136,7 +138,6 @@ def test_link_router_command_is_safe(tmp_path):
     destination.write_text("do not replace")
     with pytest.raises(ConfigurationError, match="Refusing"):
         link_router_command(runtime)
-
 
 
 def test_runtime_install_falls_back_to_uv(monkeypatch, tmp_path):
@@ -175,7 +176,9 @@ def test_secret_env_rejects_newlines_and_invalid_names(tmp_path):
         write_secret_env(tmp_path, {"bad-key": "value"})
 
 
-def test_official_hermes_install_is_noninteractive_and_lightweight_by_default(monkeypatch, tmp_path):
+def test_official_hermes_install_is_noninteractive_and_lightweight_by_default(
+    monkeypatch, tmp_path
+):
     from hermes_memory_router.bootstrap import install_official_hermes
 
     installer = tmp_path / "install.sh"
@@ -202,7 +205,6 @@ def test_official_hermes_install_is_noninteractive_and_lightweight_by_default(mo
     assert "--skip-browser" in command
 
 
-
 def test_official_hermes_install_can_include_browser(monkeypatch, tmp_path):
     from hermes_memory_router.bootstrap import install_official_hermes
 
@@ -225,6 +227,7 @@ def test_official_hermes_install_can_include_browser(monkeypatch, tmp_path):
     )
     install_official_hermes(tmp_path, installer=installer, with_browser=True)
     assert "--skip-browser" not in commands[0]
+
 
 def test_find_hermes_runtime_supports_dot_venv(tmp_path, monkeypatch):
     home = tmp_path / "profile"

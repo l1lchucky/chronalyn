@@ -5,10 +5,13 @@
 ```bash
 hermes-memory-router validate
 hermes-memory-router status
+hermes-memory-router doctor
+hermes-memory-router db check
 journalctl --user -u hermes-gateway.service -n 200 --no-pager
 ```
 
-`status` separates backend health from queued delivery state.
+`status` separates backend health from queued delivery state. `doctor` classifies
+warning, degraded, and unsafe conditions. Database integrity failure is unsafe.
 
 ## Retry failed work
 
@@ -54,9 +57,10 @@ Stop Hermes first:
 systemctl --user stop hermes-gateway.service
 ```
 
-Restore `router.db` together with its WAL and SHM files when they exist. Run a
-SQLite integrity check before restarting. Never restore a staging router database
-into production.
+Prefer a verified online backup created with `db backup`; it already includes
+committed WAL content. Follow `database-operations.md`, verify its SHA-256 manifest
+and SQLite integrity, and match profile, namespace, environment, and schema before
+restarting. Never restore a staging router database into production.
 
 ## Return to direct Hindsight
 

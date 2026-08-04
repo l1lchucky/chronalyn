@@ -47,14 +47,15 @@ class HindsightBackend(MemoryBackend):
     ) -> dict[str, Any]:
         url = f"{self.api_url}{path}"
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = urllib.request.Request(
+        # HindsightConfig.validate restricts the base URL to HTTP(S).
+        request = urllib.request.Request(  # noqa: S310
             url, data=data, headers=self._headers(), method=method
         )
         context = None
         if url.startswith("https://") and not self.config.verify_tls:
             context = ssl._create_unverified_context()  # noqa: S323 - explicit operator choice
         try:
-            with urllib.request.urlopen(
+            with urllib.request.urlopen(  # noqa: S310 - URL restricted to HTTP(S) above
                 request,
                 timeout=timeout or self.config.timeout_seconds,
                 context=context,

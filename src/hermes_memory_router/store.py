@@ -7,6 +7,8 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import suppress
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,9 +70,7 @@ class RouterStore:
             )
             """
         )
-        row = conn.execute(
-            "SELECT value FROM schema_meta WHERE key='version'"
-        ).fetchone()
+        row = conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()
         existing_version = 0
         if row is not None:
             try:
@@ -143,9 +143,11 @@ class RouterStore:
         )
 
     def _meta(self, key: str) -> str | None:
-        row = self._connection().execute(
-            "SELECT value FROM schema_meta WHERE key=?", (key,)
-        ).fetchone()
+        row = (
+            self._connection()
+            .execute("SELECT value FROM schema_meta WHERE key=?", (key,))
+            .fetchone()
+        )
         return str(row["value"]) if row else None
 
     def _bind(self, *, namespace: str, environment: str, profile_fingerprint: str) -> None:
@@ -251,9 +253,9 @@ class RouterStore:
             raise
 
     def record(self, record_id: str) -> dict[str, Any] | None:
-        row = self._connection().execute(
-            "SELECT * FROM records WHERE id=?", (record_id,)
-        ).fetchone()
+        row = (
+            self._connection().execute("SELECT * FROM records WHERE id=?", (record_id,)).fetchone()
+        )
         if not row:
             return None
         result = dict(row)
@@ -262,8 +264,10 @@ class RouterStore:
 
     def due_deliveries(self, limit: int) -> list[dict[str, Any]]:
         now = time.time()
-        rows = self._connection().execute(
-            """
+        rows = (
+            self._connection()
+            .execute(
+                """
             SELECT d.*, r.content, r.kind, r.metadata_json, r.deleted
             FROM deliveries d
             JOIN records r ON r.id=d.record_id
@@ -273,8 +277,10 @@ class RouterStore:
             ORDER BY d.created_at ASC
             LIMIT ?
             """,
-            (now, limit),
-        ).fetchall()
+                (now, limit),
+            )
+            .fetchall()
+        )
         results = []
         for row in rows:
             item = dict(row)
@@ -371,17 +377,18 @@ class RouterStore:
         )
 
     def delivery_states(self, record_id: str) -> dict[str, str]:
-        rows = self._connection().execute(
-            """
+        rows = (
+            self._connection()
+            .execute(
+                """
             SELECT backend, operation, state FROM deliveries
             WHERE record_id=? ORDER BY backend, operation
             """,
-            (record_id,),
-        ).fetchall()
-        return {
-            f"{row['backend']}:{row['operation']}": str(row["state"])
-            for row in rows
-        }
+                (record_id,),
+            )
+            .fetchall()
+        )
+        return {f"{row['backend']}:{row['operation']}": str(row["state"]) for row in rows}
 
     def create_deletion_plan(self, record_id: str, *, ttl_seconds: int = 300) -> str:
         record = self.record(record_id)
@@ -450,9 +457,7 @@ class RouterStore:
         record_id: str,
         now: float,
     ) -> None:
-        record = conn.execute(
-            "SELECT id FROM records WHERE id=?", (record_id,)
-        ).fetchone()
+        record = conn.execute("SELECT id FROM records WHERE id=?", (record_id,)).fetchone()
         if not record:
             raise KeyError(record_id)
         conn.execute(
@@ -565,6 +570,137 @@ class RouterStore:
             },
         }
 
+    @staticmethod
+    def _file_size(path: Path) -> int:
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+
+    def database_info(self) -> dict[str, Any]:
+        conn = self._connection()
+        counts = {
+            str(row["state"]): int(row["count"])
+            for row in conn.execute("SELECT state, COUNT(*) count FROM deliveries GROUP BY state")
+        }
+        deliveries = {
+            state: counts.get(state, 0)
+            for state in ("pending", "processing", "failed", "dead", "complete", "cancelled")
+        }
+        oldest = conn.execute(
+            """
+            SELECT created_at, state, backend, operation
+            FROM deliveries
+            WHERE state IN ('pending', 'processing', 'failed', 'dead')
+            ORDER BY created_at ASC LIMIT 1
+            """
+        ).fetchone()
+        oldest_payload = None
+        if oldest is not None:
+            oldest_payload = {
+                "created_at": datetime.fromtimestamp(float(oldest["created_at"]), UTC).isoformat(),
+                "age_seconds": max(0.0, time.time() - float(oldest["created_at"])),
+                "state": str(oldest["state"]),
+                "backend": str(oldest["backend"]),
+                "operation": str(oldest["operation"]),
+            }
+        return {
+            "path": str(self.path),
+            "schema_version": int(self._meta("version") or _SCHEMA_VERSION),
+            "binding": {
+                "namespace": self._meta("binding_namespace"),
+                "environment": self._meta("binding_environment"),
+                "profile": self._meta("binding_profile"),
+            },
+            "deliveries": deliveries,
+            "oldest_incomplete_delivery": oldest_payload,
+            "size_bytes": self._file_size(self.path),
+            "wal_size_bytes": self._file_size(Path(f"{self.path}-wal")),
+            "shm_size_bytes": self._file_size(Path(f"{self.path}-shm")),
+        }
+
+    @staticmethod
+    def check_database(path: Path) -> dict[str, Any]:
+        try:
+            connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+            try:
+                row = connection.execute("PRAGMA integrity_check").fetchone()
+                integrity = str(row[0]) if row else "no result"
+                schema = connection.execute(
+                    "SELECT value FROM schema_meta WHERE key='version'"
+                ).fetchone()
+                binding = {
+                    key.removeprefix("binding_"): value
+                    for key, value in connection.execute(
+                        "SELECT key, value FROM schema_meta WHERE key LIKE 'binding_%'"
+                    )
+                }
+            finally:
+                connection.close()
+            return {
+                "ok": integrity == "ok",
+                "integrity": integrity,
+                "schema_version": int(schema[0]) if schema else None,
+                "binding": binding,
+                "path": str(path),
+            }
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            return {"ok": False, "integrity": str(exc), "path": str(path)}
+
+    def backup_database(self, output: Path) -> dict[str, Any]:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if output.exists():
+            raise ConfigurationError(f"Backup already exists: {output}")
+        destination = sqlite3.connect(str(output))
+        try:
+            self._connection().backup(destination)
+        finally:
+            destination.close()
+        digest = hashlib.sha256(output.read_bytes()).hexdigest()
+        manifest = {
+            "format_version": 1,
+            "created_at": datetime.now(UTC).isoformat(),
+            "database": output.name,
+            "sha256": digest,
+            "size_bytes": self._file_size(output),
+            "schema_version": int(self._meta("version") or _SCHEMA_VERSION),
+            "binding": self.database_info()["binding"],
+        }
+        manifest_path = output.with_suffix(output.suffix + ".manifest.json")
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        return manifest
+
+    @staticmethod
+    def verify_backup_manifest(path: Path) -> dict[str, Any]:
+        manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            integrity = RouterStore.check_database(path)
+            sha_matches = actual == manifest.get("sha256")
+            return {
+                "ok": sha_matches and bool(integrity.get("ok")),
+                "sha256_matches": sha_matches,
+                "expected_sha256": manifest.get("sha256"),
+                "actual_sha256": actual,
+                "integrity": integrity,
+                "manifest": str(manifest_path),
+            }
+        except (OSError, json.JSONDecodeError) as exc:
+            return {"ok": False, "sha256_matches": False, "error": str(exc)}
+
+    def vacuum_database(self, *, confirm: bool) -> dict[str, Any]:
+        if not confirm:
+            raise ConfigurationError("Database vacuum requires explicit --yes confirmation")
+        before = self._file_size(self.path)
+        self._connection().execute("VACUUM")
+        return {
+            "vacuumed": True,
+            "path": str(self.path),
+            "size_before_bytes": before,
+            "size_after_bytes": self._file_size(self.path),
+        }
+
     def audit(self, record_id: str | None, event: str, details: dict[str, Any]) -> None:
         self._audit_conn(self._connection(), record_id, event, details)
 
@@ -583,25 +719,31 @@ class RouterStore:
             (record_id, event, json.dumps(details, sort_keys=True), time.time()),
         )
 
-    def list_records(
-        self, *, kind: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def list_records(self, *, kind: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         if kind:
-            rows = self._connection().execute(
-                """
+            rows = (
+                self._connection()
+                .execute(
+                    """
                 SELECT id, namespace, environment, kind, deleted, created_at
                 FROM records WHERE kind=? ORDER BY created_at DESC LIMIT ?
                 """,
-                (kind, limit),
-            ).fetchall()
+                    (kind, limit),
+                )
+                .fetchall()
+            )
         else:
-            rows = self._connection().execute(
-                """
+            rows = (
+                self._connection()
+                .execute(
+                    """
                 SELECT id, namespace, environment, kind, deleted, created_at
                 FROM records ORDER BY created_at DESC LIMIT ?
                 """,
-                (limit,),
-            ).fetchall()
+                    (limit,),
+                )
+                .fetchall()
+            )
         return [dict(row) for row in rows]
 
     def close(self) -> None:
@@ -609,8 +751,6 @@ class RouterStore:
             connections = list(self._connections)
             self._connections.clear()
         for connection in connections:
-            try:
+            with suppress(sqlite3.Error):
                 connection.close()
-            except sqlite3.Error:
-                pass
         self._local.connection = None

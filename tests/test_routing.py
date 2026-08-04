@@ -11,7 +11,7 @@ def test_primary_recall_wins(router):
 
 
 def test_empty_primary_uses_checkpoint(router):
-    instance, primary, checkpoint = router
+    instance, _primary, checkpoint = router
     checkpoint.hits = [MemoryHit("checkpoint", source="mnemosyne")]
     result = instance.recall(query="q")
     assert result.fallback_used
@@ -28,7 +28,7 @@ def test_primary_error_uses_checkpoint(router):
 
 
 def test_fallback_context_is_bounded(router):
-    instance, primary, checkpoint = router
+    instance, _primary, checkpoint = router
     instance.config.routing.fallback_max_chars = 256
     checkpoint.hits = [MemoryHit("a" * 400), MemoryHit("b" * 400)]
     result = instance.recall(query="q")
@@ -36,5 +36,5 @@ def test_fallback_context_is_bounded(router):
 
 
 def test_reflect_goes_only_to_primary(router):
-    instance, primary, checkpoint = router
+    instance, _primary, _checkpoint = router
     assert instance.reflect(query="why")["query"] == "why"

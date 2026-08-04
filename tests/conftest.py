@@ -6,8 +6,8 @@ import pytest
 
 from hermes_memory_router.adapters.base import MemoryBackend
 from hermes_memory_router.config import RouterConfig
-from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE
 from hermes_memory_router.models import BackendReceipt, MemoryHit
+from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE
 from hermes_memory_router.router import MemoryRouter
 from hermes_memory_router.store import RouterStore
 
@@ -79,7 +79,13 @@ def router(tmp_path, config):
     checkpoint = FakeBackend("mnemosyne")
     instance = MemoryRouter(
         config=config,
-        store=RouterStore(tmp_path / "router.db"),
+        store=RouterStore(
+            tmp_path / "router.db",
+            namespace=config.namespace,
+            environment=config.environment,
+            profile_fingerprint="test-profile",
+            strict_binding=True,
+        ),
         primary=primary,
         checkpoint=checkpoint,
     )

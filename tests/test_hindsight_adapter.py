@@ -18,7 +18,7 @@ def test_retain_uses_router_document_id():
     receipt = backend.retain(
         content="checkpoint", record_id="mr_123", kind="checkpoint", metadata={}
     )
-    method, path, body = backend.requests[0]
+    method, _path, body = backend.requests[0]
     assert method == "POST"
     assert body["items"][0]["document_id"] == "memory-router:mr_123"
     assert receipt.external_id == "memory-router:mr_123"

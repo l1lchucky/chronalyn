@@ -4,10 +4,12 @@ import argparse
 import json
 import os
 import shutil
+import sys
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
-from .compatibility import discover, require_strict_hermes_compatibility
+from .compatibility import discover, profile_fingerprint, require_strict_hermes_compatibility
 from .config import load_config, write_config, write_default_config
 from .exceptions import ConfigurationError
 from .factory import build_router
@@ -17,13 +19,13 @@ from .operations import (
     build_plan,
     config_for_adoption,
     confirm,
-    plan_json,
     recommended_policy,
     remove_mnemosyne,
     require_cloud_approval,
     rollback_latest,
 )
 from .policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
+from .store import RouterStore
 from .ui import PacmanLoader
 
 
@@ -90,6 +92,19 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("detect", help="Read-only provider and compatibility discovery")
     sub.add_parser("validate", help="Validate configuration without network calls")
     sub.add_parser("status", help="Show router and backend status")
+    sub.add_parser("doctor", help="Check configuration, database, queue, and backend health")
+    db = sub.add_parser("db", help="Safely inspect and maintain the router database")
+    db_sub = db.add_subparsers(dest="db_command", required=True)
+    db_sub.add_parser("info", help="Show database identity, queue counts, and file sizes")
+    db_sub.add_parser("check", help="Run SQLite integrity_check without opening backends")
+    backup = db_sub.add_parser("backup", help="Create an online SQLite backup and manifest")
+    backup.add_argument("--output", required=True)
+    verify_backup = db_sub.add_parser(
+        "verify-backup", help="Verify backup manifest SHA-256 and integrity"
+    )
+    verify_backup.add_argument("--path", required=True)
+    vacuum = db_sub.add_parser("vacuum", help="Run VACUUM after explicit confirmation")
+    vacuum.add_argument("--yes", action="store_true")
     sub.add_parser("install-plugin", help="Install the Hermes memory-provider entry")
     sub.add_parser("uninstall-plugin", help="Remove only the Hermes plugin entry")
 
@@ -139,7 +154,7 @@ def _loader(args: argparse.Namespace, label: str) -> PacmanLoader:
     return PacmanLoader(label, enabled=False if args.no_animation or args.json else None)
 
 
-def _print(args: argparse.Namespace, payload, *, human: str | None = None) -> None:
+def _print(args: argparse.Namespace, payload: Any, *, human: str | None = None) -> None:
     if args.json:
         print(json.dumps(payload, indent=2, default=str))
     elif human is not None:
@@ -148,6 +163,37 @@ def _print(args: argparse.Namespace, payload, *, human: str | None = None) -> No
         print(payload)
     else:
         print(json.dumps(payload, indent=2, default=str))
+
+
+def _status_human(payload: dict[str, Any]) -> str:
+    versions = payload["versions"]
+    deliveries = payload["deliveries"]
+    database = payload["database"]
+    lines = [
+        f"Health: {payload['state']}",
+        f"Router: {versions['router']} "
+        f"(config schema {versions['configuration_schema']}, "
+        f"database schema {versions['database_schema']})",
+        f"Runtime: Python {versions['python']}, SQLite {versions['sqlite']}",
+        f"Policy: {payload['policy']}",
+        f"Binding: namespace={payload['namespace']} environment={payload['environment']} "
+        f"profile={payload['binding']['database']['profile'] or 'unbound'}",
+        "Deliveries: "
+        + ", ".join(
+            f"{state}={deliveries.get(state, 0)}" for state in ("pending", "failed", "dead")
+        ),
+        f"Database: {database['size_bytes']} B "
+        f"(WAL {database['wal_size_bytes']} B, SHM {database['shm_size_bytes']} B)",
+    ]
+    oldest = payload.get("oldest_incomplete_delivery")
+    if oldest:
+        lines.append(
+            f"Oldest incomplete delivery: {oldest['state']} {oldest['backend']} "
+            f"{oldest['operation']} ({oldest['age_seconds']:.0f}s old)"
+        )
+    for category in ("warnings", "degraded", "unsafe"):
+        lines.extend(f"{category[:-1].upper()}: {message}" for message in payload.get(category, []))
+    return "\n".join(lines)
 
 
 def _require_apply_confirmation(args: argparse.Namespace, prompt: str) -> None:
@@ -163,7 +209,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "setup-dual":
             if args.json:
-                raise ConfigurationError("setup-dual is an interactive terminal UI and cannot use --json")
+                raise ConfigurationError(
+                    "setup-dual is an interactive terminal UI and cannot use --json"
+                )
             from .setup_tui import run_dual_setup
 
             return run_dual_setup(
@@ -183,7 +231,9 @@ def main(argv: list[str] | None = None) -> int:
                     environment=args.environment,
                     policy=args.policy,
                 )
-            _print(args, {"config": str(config_path), "policy": args.policy}, human=str(config_path))
+            _print(
+                args, {"config": str(config_path), "policy": args.policy}, human=str(config_path)
+            )
             return 0
 
         if args.command == "install-plugin":
@@ -217,9 +267,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             policy = recommended_policy(state) if args.policy == "auto" else args.policy
             if policy == HINDSIGHT_MNEMOSYNE and not state.mnemosyne_installed:
-                raise ConfigurationError(
-                    "The dual policy requires mnemosyne-memory>=3.15,<4"
-                )
+                raise ConfigurationError("The dual policy requires mnemosyne-memory>=3.15,<4")
             config = config_for_adoption(
                 home,
                 state,
@@ -298,7 +346,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
 
         if args.command == "rollback":
-            _require_apply_confirmation(args, "Restore the latest router configuration backup? [y/N] ")
+            _require_apply_confirmation(
+                args, "Restore the latest router configuration backup? [y/N] "
+            )
             with _loader(args, "Restoring configuration backup"):
                 backup, restored = rollback_latest(home)
             _print(
@@ -330,14 +380,55 @@ def main(argv: list[str] | None = None) -> int:
             _print(args, payload)
             return 0
 
+        if args.command == "db":
+            db_path = config.resolved_state_db(home)
+            if args.db_command == "check":
+                payload = RouterStore.check_database(db_path)
+                _print(args, payload)
+                return 0 if payload.get("ok") else 3
+            if args.db_command == "verify-backup":
+                payload = RouterStore.verify_backup_manifest(Path(args.path))
+                _print(args, payload)
+                return 0 if payload.get("ok") else 3
+            if not db_path.exists():
+                raise ConfigurationError(f"Router database does not exist: {db_path}")
+            store = RouterStore(
+                db_path,
+                namespace=config.namespace,
+                environment=config.environment,
+                profile_fingerprint=profile_fingerprint(home),
+                strict_binding=True,
+            )
+            try:
+                if args.db_command == "info":
+                    payload = store.database_info()
+                elif args.db_command == "backup":
+                    payload = store.backup_database(Path(args.output))
+                elif args.db_command == "vacuum":
+                    payload = store.vacuum_database(confirm=args.yes)
+                else:
+                    raise ConfigurationError(f"Unknown database command: {args.db_command}")
+            finally:
+                store.close()
+            _print(args, payload)
+            return 0
+
         require_strict_hermes_compatibility(home)
         with _loader(args, "Starting memory backends"):
             router = build_router(config=config, hermes_home=home, session_id="router-cli")
         try:
-            if args.command == "status":
+            if args.command in {"status", "doctor"}:
                 with _loader(args, "Checking backend health"):
-                    payload = router.status()
-                _print(args, payload)
+                    integrity = (
+                        RouterStore.check_database(config.resolved_state_db(home))
+                        if args.command == "doctor"
+                        else None
+                    )
+                    payload = router.status(integrity=integrity)
+                _print(args, payload, human=_status_human(payload))
+                if args.command == "doctor":
+                    exit_code = payload.get("exit_code")
+                    return exit_code if isinstance(exit_code, int) else 2
             elif args.command == "retry":
                 with _loader(args, "Retrying failed deliveries"):
                     retried = router.retry(args.record_id)
@@ -356,12 +447,12 @@ def main(argv: list[str] | None = None) -> int:
                 _print(args, {**payload, "processed": processed})
             return 0
         finally:
-            router.close()
+            router.close(flush=args.command not in {"status", "doctor"})
     except ConfigurationError as exc:
         if args.json:
             print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
         else:
-            print(f"ERROR: {exc}", file=os.sys.stderr)
+            print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
 

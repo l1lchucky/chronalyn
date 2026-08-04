@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
 
 from hermes_memory_router.compatibility import (
     active_memory_providers,
@@ -27,9 +24,7 @@ def test_active_provider_reads_singular_and_plural(tmp_path):
 
 
 def test_router_plus_any_other_provider_is_conflict(tmp_path):
-    (tmp_path / "config.yaml").write_text(
-        "memory:\n  providers: [hermes_memory_router, honcho]\n"
-    )
+    (tmp_path / "config.yaml").write_text("memory:\n  providers: [hermes_memory_router, honcho]\n")
     state = discover(tmp_path)
     assert state.conflicts
     assert "sole active" in state.conflicts[0]
@@ -62,7 +57,6 @@ def test_backup_restore_removes_files_that_were_absent(tmp_path):
     restored = restore_backup(tmp_path, backup)
     assert not new_router.exists()
     assert "removed:memory-router/config.json" in restored
-
 
 
 def test_activation_uses_selected_hermes_home(tmp_path, monkeypatch):

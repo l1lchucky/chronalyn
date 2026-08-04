@@ -82,7 +82,6 @@ omit = [
   "src/hermes_memory_router/adapters/mnemosyne.py",
   "src/hermes_memory_router/bootstrap.py",
   "src/hermes_memory_router/setup_tui.py",
-  "src/hermes_memory_router/operations.py",
 ]
 
 [tool.coverage.report]
@@ -103,9 +102,16 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = ["S101"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["S108"]  # Fixed fake POSIX paths; tests do not write there.
+"src/hermes_memory_router/setup_tui.py" = [
+  "E501", "F841", "RUF059", "S110", "SIM102", "SIM105",
+] # Interactive curses boundary; formatting remains enforced.
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
+explicit_package_bases = true
 packages = ["hermes_memory_router"]
 mypy_path = "src"
 warn_unused_ignores = true
