@@ -3,6 +3,11 @@
 The local tests use fake backends. Complete this checklist on a staging host
 before production use.
 
+Passing local tests alone does not prove production readiness. Automatic checks
+cannot prove live service compatibility, restore success, isolation under traffic,
+or capacity. Use a staging profile with separate credentials, banks, namespace,
+environment, database, and preferably a separate host.
+
 ## 1. Install and discover the plugin
 
 ```bash
@@ -118,3 +123,19 @@ host with matching identity settings.
 
 Pass: checkpoint IDs, backend mappings, delivery states, and recall remain
 consistent.
+
+## Readiness decision and staging soak
+
+Run `doctor` and `db check`, preserve their output, and monitor the queue, backend
+health, disk use, and logs for the agreed soak period. Any cross-environment recall,
+integrity failure, failed deletion, dead delivery, or secret-handling failure is a
+stop condition. Do not promote until the cause is understood and the complete
+checklist passes again.
+
+## Rollback
+
+Stop the gateway, preserve the current database and logs, disable the router or
+restore the last known configuration, and restore only a verified matching-profile
+backup. Re-run integrity, binding, and live checks before resuming traffic. Router
+configuration rollback does not undo backend writes or replace a coordinated data
+restore. See `failure-recovery.md` and `database-operations.md`.

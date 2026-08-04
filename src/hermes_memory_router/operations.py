@@ -101,17 +101,13 @@ def build_plan(
     )
     dual = policy == HINDSIGHT_MNEMOSYNE
     return ConfigurationPlan(
-        current_provider=(
-            ", ".join(state.active_providers) if state.active_providers else ""
-        ),
+        current_provider=(", ".join(state.active_providers) if state.active_providers else ""),
         current_hindsight_bank=bank,
         proposed_provider="hermes_memory_router",
         primary_backend="hindsight",
         checkpoint_backend="mnemosyne" if dual else "",
         automatic_retention="Hindsight only",
-        verified_checkpoints=(
-            "Hindsight + Mnemosyne" if dual else "Hindsight only"
-        ),
+        verified_checkpoints=("Hindsight + Mnemosyne" if dual else "Hindsight only"),
         fallback=(
             "Mnemosyne checkpoints only when Hindsight is empty or unavailable"
             if dual

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ class MnemosyneBackend(MemoryBackend):
                 str(Path(config.data_dir).expanduser()),
             )
         try:
-            from mnemosyne import Mnemosyne
+            Mnemosyne = import_module("mnemosyne").Mnemosyne
         except Exception as exc:
             raise BackendUnavailable(
                 "mnemosyne-memory is not importable; install mnemosyne-memory>=3.15,<4"
@@ -35,7 +36,7 @@ class MnemosyneBackend(MemoryBackend):
 
     def health(self) -> dict[str, Any]:
         try:
-            stats = {}
+            stats: dict[str, Any] = {}
             if hasattr(self._memory, "get_stats"):
                 stats = self._memory.get_stats() or {}
             return {"ok": True, "details": stats}

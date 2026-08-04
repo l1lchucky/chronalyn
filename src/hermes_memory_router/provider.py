@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-try:
-    from agent.memory_provider import MemoryProvider
-except ImportError:  # Keeps package tests usable when Hermes is not installed.
-    class MemoryProvider:  # type: ignore[no-redef]
+if TYPE_CHECKING:
+
+    class MemoryProvider:
         pass
+else:
+    try:
+        from agent.memory_provider import MemoryProvider
+    except ImportError:  # Keeps package tests usable when Hermes is not installed.
+
+        class MemoryProvider:
+            pass
+
 
 from .compatibility import require_strict_hermes_compatibility
 from .config import RouterConfig, load_config
@@ -48,18 +56,14 @@ class HermesMemoryRouterProvider(MemoryProvider):
             config = load_config(config_path)
         except Exception:
             return False
-        if config.policy.endswith("mnemosyne-checkpoints"):
-            try:
-                import mnemosyne  # noqa: F401
-            except Exception:
-                return False
-        return True
+        return not (
+            config.policy.endswith("mnemosyne-checkpoints")
+            and importlib.util.find_spec("mnemosyne") is None
+        )
 
-    def initialize(self, session_id: str, **kwargs) -> None:
+    def initialize(self, session_id: str, **kwargs: Any) -> None:
         self._hermes_home = Path(
-            kwargs.get("hermes_home")
-            or os.environ.get("HERMES_HOME")
-            or (Path.home() / ".hermes")
+            kwargs.get("hermes_home") or os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")
         ).expanduser()
         self._session_id = session_id
         self._agent_context = str(kwargs.get("agent_context") or "primary")
@@ -102,7 +106,8 @@ class HermesMemoryRouterProvider(MemoryProvider):
         ]
         if result.primary_error:
             lines.append(
-                "Primary backend was unavailable; the following is checkpoint-only fallback context."
+                "Primary backend was unavailable; the following is "
+                "checkpoint-only fallback context."
             )
         for index, hit in enumerate(result.hits, start=1):
             lines.append(f"{index}. {hit.content}")
@@ -137,9 +142,7 @@ class HermesMemoryRouterProvider(MemoryProvider):
             return []
         return tool_schemas_for(self._config)
 
-    def handle_tool_call(
-        self, tool_name: str, args: dict[str, Any], **kwargs
-    ) -> str:
+    def handle_tool_call(self, tool_name: str, args: dict[str, Any], **kwargs: Any) -> str:
         if not self._router or not self._config:
             return _json({"ok": False, "error": "Memory router is not initialized"})
         allowed = {schema["name"] for schema in tool_schemas_for(self._config)}
@@ -147,29 +150,29 @@ class HermesMemoryRouterProvider(MemoryProvider):
             return _json({"ok": False, "error": f"Tool is disabled by strict profile: {tool_name}"})
         try:
             if tool_name == "memory_router_retain":
-                result = self._router.retain_memory(
+                retain_result = self._router.retain_memory(
                     content=str(args.get("content", "")),
                     context=str(args.get("context", "")),
                     metadata=dict(args.get("metadata") or {}),
                 )
-                return _json({"ok": True, **result.to_dict()})
+                return _json({"ok": True, **retain_result.to_dict()})
             if tool_name == "memory_router_checkpoint":
                 level = str(args.get("verification_level", ""))
                 if level not in VERIFICATION_LEVELS:
                     return _json({"ok": False, "error": "Invalid verification_level"})
-                result = self._router.checkpoint_record(
+                checkpoint_result = self._router.checkpoint_record(
                     content=str(args.get("content", "")),
                     verification_level=level,
                     evidence=str(args.get("evidence", "")),
                     metadata=dict(args.get("metadata") or {}),
                 )
-                return _json({"ok": True, **result.to_dict()})
+                return _json({"ok": True, **checkpoint_result.to_dict()})
             if tool_name == "memory_router_recall":
-                result = self._router.recall(
+                recall_result = self._router.recall(
                     query=str(args.get("query", "")),
                     limit=max(1, min(int(args.get("limit", 5)), 20)),
                 )
-                return _json({"ok": True, **result.to_dict()})
+                return _json({"ok": True, **recall_result.to_dict()})
             if tool_name == "memory_router_reflect":
                 return _json(
                     {
@@ -208,7 +211,7 @@ class HermesMemoryRouterProvider(MemoryProvider):
         parent_session_id: str = "",
         reset: bool = False,
         rewound: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         self._session_id = new_session_id
 
@@ -236,15 +239,13 @@ class HermesMemoryRouterProvider(MemoryProvider):
             self._router = None
 
     def backup_paths(self) -> list[str]:
-        home = self._hermes_home or Path(
-            os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")
-        )
+        home = self._hermes_home or Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
         try:
             config = load_config(home / "memory-router" / "config.json")
             if config.mnemosyne.data_dir:
                 return [str(Path(config.mnemosyne.data_dir).expanduser())]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not resolve optional Mnemosyne backup path: %s", exc)
         return []
 
     def get_config_schema(self) -> list[dict[str, Any]]:
@@ -274,5 +275,5 @@ class HermesMemoryRouterProvider(MemoryProvider):
         )
 
 
-def register(ctx) -> None:
+def register(ctx: Any) -> None:
     ctx.register_memory_provider(HermesMemoryRouterProvider())

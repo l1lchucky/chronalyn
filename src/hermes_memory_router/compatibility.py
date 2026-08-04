@@ -5,16 +5,18 @@ import importlib.metadata
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
+from contextlib import suppress
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from .exceptions import ConfigurationError
-from .policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
+from .policy import HINDSIGHT_MNEMOSYNE
 
 ROUTER_PROVIDER = "hermes_memory_router"
 CHILD_PROVIDERS = {"hindsight", "mnemosyne"}
@@ -81,7 +83,7 @@ def _strip_scalar(value: str) -> str:
     value = value.strip()
     if not value:
         return ""
-    if value[0:1] in {"\"", "'"} and value[-1:] == value[0]:
+    if value[0:1] in {'"', "'"} and value[-1:] == value[0]:
         return value[1:-1]
     return value
 
@@ -93,11 +95,7 @@ def _inline_yaml_list(value: str) -> tuple[str, ...]:
     inner = text[1:-1].strip()
     if not inner:
         return ()
-    return tuple(
-        item
-        for item in (_strip_scalar(part) for part in inner.split(","))
-        if item
-    )
+    return tuple(item for item in (_strip_scalar(part) for part in inner.split(",")) if item)
 
 
 def active_memory_providers(hermes_home: Path) -> tuple[str, ...]:
@@ -165,6 +163,7 @@ def _numeric_version(value: str) -> tuple[int, int, int]:
         raise ConfigurationError(f"Cannot interpret dependency version: {value}")
     return tuple(int(part or 0) for part in match.groups())  # type: ignore[return-value]
 
+
 def _find_first(payload: Any, keys: set[str]) -> Any:
     if isinstance(payload, dict):
         for key, value in payload.items():
@@ -215,11 +214,11 @@ def read_hindsight_config(hermes_home: Path) -> dict[str, Any]:
 
 def inspect_memory_contract() -> tuple[bool, tuple[str, ...]]:
     try:
-        from agent.memory_provider import MemoryProvider
+        memory_provider = importlib.import_module("agent.memory_provider").MemoryProvider
     except Exception:
         return False, tuple(sorted(_REQUIRED_MEMORY_METHODS))
     missing = tuple(
-        sorted(name for name in _REQUIRED_MEMORY_METHODS if not hasattr(MemoryProvider, name))
+        sorted(name for name in _REQUIRED_MEMORY_METHODS if not hasattr(memory_provider, name))
     )
     return not missing, missing
 
@@ -294,13 +293,11 @@ def require_strict_hermes_compatibility(hermes_home: Path) -> HermesDiscovery:
 
 
 def backup_configuration(hermes_home: Path, *, reason: str) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     target = hermes_home / "memory-router" / "backups" / stamp
     target.mkdir(parents=True, exist_ok=False)
-    try:
+    with suppress(OSError):
         target.chmod(0o700)
-    except OSError:
-        pass
     copied: list[str] = []
     absent: list[str] = []
     managed = (
@@ -312,7 +309,7 @@ def backup_configuration(hermes_home: Path, *, reason: str) -> Path:
         hermes_home / "plugins" / "memory" / "hermes_memory_router" / "plugin.yaml",
     )
     for source in managed:
-        relative = str(source.relative_to(hermes_home))
+        relative = source.relative_to(hermes_home).as_posix()
         if source.exists():
             destination = target / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -321,16 +318,14 @@ def backup_configuration(hermes_home: Path, *, reason: str) -> Path:
         else:
             absent.append(relative)
     metadata = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "reason": reason,
         "hermes_home": str(hermes_home),
         "copied": copied,
         "absent": absent,
         "active_providers": list(active_memory_providers(hermes_home)),
     }
-    (target / "backup.json").write_text(
-        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
-    )
+    (target / "backup.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     return target
 
 
@@ -402,7 +397,7 @@ def set_active_provider_with_hermes(
     environment = os.environ.copy()
     if hermes_home is not None:
         environment["HERMES_HOME"] = str(hermes_home.expanduser())
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - trusted discovered Hermes executable
         [hermes, "config", "set", "memory.provider", provider],
         capture_output=True,
         text=True,

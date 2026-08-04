@@ -3,14 +3,16 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from .exceptions import ConfigurationError
 from .policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY, POLICIES
 
 CONFIG_SCHEMA_VERSION = 2
+T = TypeVar("T")
 _NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
 _ALLOWED_CONTEXTS = {"primary", "subagent", "cron", "flush"}
 _ALLOWED_BUDGETS = {"low", "mid", "high"}
@@ -102,9 +104,7 @@ class RoutingConfig:
             "primary_and_checkpoint" if policy == HINDSIGHT_MNEMOSYNE else "primary_only"
         )
         if self.recall_policy != expected_recall:
-            raise ConfigurationError(
-                f"Policy {policy} requires recall_policy={expected_recall}"
-            )
+            raise ConfigurationError(f"Policy {policy} requires recall_policy={expected_recall}")
         if self.checkpoint_write_policy != expected_checkpoint:
             raise ConfigurationError(
                 f"Policy {policy} requires checkpoint_write_policy={expected_checkpoint}"
@@ -266,7 +266,7 @@ class RouterConfig:
         return asdict(self)
 
 
-def _nested_dataclass(cls, payload: dict[str, Any] | None):
+def _nested_dataclass(cls: type[T], payload: dict[str, Any] | None) -> T:
     try:
         return cls(**(payload or {}))
     except TypeError as exc:
@@ -299,9 +299,21 @@ def load_config(path: Path) -> RouterConfig:
         raw = _upgrade_v1(raw)
 
     known = {
-        "schema_version", "namespace", "environment", "policy", "state_db",
-        "primary_backend", "checkpoint_backend", "hindsight", "mnemosyne",
-        "redaction", "routing", "compatibility", "privacy", "tools", "isolation",
+        "schema_version",
+        "namespace",
+        "environment",
+        "policy",
+        "state_db",
+        "primary_backend",
+        "checkpoint_backend",
+        "hindsight",
+        "mnemosyne",
+        "redaction",
+        "routing",
+        "compatibility",
+        "privacy",
+        "tools",
+        "isolation",
     }
     unknown = set(raw) - known
     if unknown:
@@ -333,10 +345,8 @@ def write_config(path: Path, config: RouterConfig) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(config.to_safe_dict(), indent=2) + "\n", encoding="utf-8")
-    try:
+    with suppress(OSError):
         temporary.chmod(0o600)
-    except OSError:
-        pass
     temporary.replace(path)
 
 

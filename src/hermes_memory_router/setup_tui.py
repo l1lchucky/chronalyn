@@ -7,9 +7,10 @@ import sys
 import textwrap
 import threading
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any
 
 from .bootstrap import (
     OFFICIAL_HERMES_INSTALLER,
@@ -19,8 +20,8 @@ from .bootstrap import (
     find_hermes_runtime,
     install_official_hermes,
     install_plugin_entry,
-    link_router_command,
     install_router_into_runtime,
+    link_router_command,
     make_temp_dir,
     verify_router_in_runtime,
     write_hindsight_profile_config,
@@ -149,9 +150,7 @@ def explain_dual_mode() -> tuple[str, ...]:
 
 
 def acknowledgement_items(state: DualSetupState) -> tuple[str, ...]:
-    remote = bool(state.hindsight_api_url) and not is_local_endpoint(
-        state.hindsight_api_url
-    )
+    remote = bool(state.hindsight_api_url) and not is_local_endpoint(state.hindsight_api_url)
     transmission = (
         "Sanitized memory is sent off-device to the displayed Hindsight endpoint; "
         "raw tool messages remain disabled."
@@ -175,8 +174,8 @@ class DualSetupApp:
     def __init__(self, state: DualSetupState, *, mouse: bool = True) -> None:
         self.state = state
         self.mouse_requested = mouse
-        self.curses = None
-        self.stdscr = None
+        self.curses: Any = None
+        self.stdscr: Any = None
         self.frame = 0
         self.log_lines: list[str] = []
         self.log_path: Path | None = None
@@ -263,7 +262,7 @@ class DualSetupApp:
         self.stdscr.timeout(timeout_ms)
         key = self.stdscr.getch()
         self.stdscr.timeout(-1)
-        return key
+        return int(key)
 
     def _enable_mouse(self) -> None:
         if not self.mouse_requested:
@@ -330,9 +329,9 @@ class DualSetupApp:
                     _id, x, mouse_y, _z, state = self.curses.getmouse()
                 except self.curses.error:
                     continue
-                index = layout.item_at(mouse_y, x, left=4, right=width - 4)
-                if index is not None:
-                    selected = index
+                clicked_index = layout.item_at(mouse_y, x, left=4, right=width - 4)
+                if clicked_index is not None:
+                    selected = clicked_index
                     if state & (
                         self.curses.BUTTON1_CLICKED
                         | self.curses.BUTTON1_DOUBLE_CLICKED
@@ -378,7 +377,9 @@ class DualSetupApp:
                 y += 2
             ready = len(self.state.acknowledgements) == len(items)
             status = "ENTER continue" if ready else "Check all four statements to continue"
-            self._safe_add(height - 5, 4, status, self.curses.A_BOLD if ready else self.curses.A_DIM)
+            self._safe_add(
+                height - 5, 4, status, self.curses.A_BOLD if ready else self.curses.A_DIM
+            )
             self.stdscr.refresh()
             key = self._wait_key()
             if key == -1:
@@ -388,14 +389,14 @@ class DualSetupApp:
                     _id, x, mouse_y, _z, event = self.curses.getmouse()
                 except self.curses.error:
                     continue
-                index = MenuLayout(tuple(rows)).item_at(mouse_y, x, left=4, right=width - 4)
-                if index is not None and event & (
+                clicked_index = MenuLayout(tuple(rows)).item_at(mouse_y, x, left=4, right=width - 4)
+                if clicked_index is not None and event & (
                     self.curses.BUTTON1_CLICKED
                     | self.curses.BUTTON1_RELEASED
                     | self.curses.BUTTON1_DOUBLE_CLICKED
                 ):
-                    selected = index
-                    self._toggle_ack(index)
+                    selected = clicked_index
+                    self._toggle_ack(clicked_index)
                 continue
             if ord("1") <= key <= ord("4"):
                 selected = key - ord("1")
@@ -534,7 +535,9 @@ class DualSetupApp:
     # ------------------------------------------------------------------
     # Progress/log screen
     # ------------------------------------------------------------------
-    def _run_task(self, step: str, title: str, task: Callable[[Callable[[str], None]], None]) -> None:
+    def _run_task(
+        self, step: str, title: str, task: Callable[[Callable[[str], None]], None]
+    ) -> None:
         events: queue.Queue[tuple[str, object]] = queue.Queue()
         logs: list[str] = []
 
@@ -569,7 +572,11 @@ class DualSetupApp:
                     logs.append(str(payload))
                     logs[:] = logs[-200:]
                 elif kind == "error":
-                    error = payload if isinstance(payload, BaseException) else RuntimeError(str(payload))
+                    error = (
+                        payload
+                        if isinstance(payload, BaseException)
+                        else RuntimeError(str(payload))
+                    )
                     done = True
                 elif kind == "done":
                     done = True
@@ -577,7 +584,9 @@ class DualSetupApp:
                 step,
                 footer="Setup is running; output is logged. Do not close the terminal.",
             )
-            y = self._draw_title(4, title, "The Pac-Man line advances while the current operation is active.")
+            y = self._draw_title(
+                4, title, "The Pac-Man line advances while the current operation is active."
+            )
             y += 1
             available = max(4, height - y - 5)
             for line in logs[-available:]:
@@ -592,7 +601,7 @@ class DualSetupApp:
     # ------------------------------------------------------------------
     # Flow
     # ------------------------------------------------------------------
-    def _main(self, stdscr) -> int:
+    def _main(self, stdscr: Any) -> int:
         self.stdscr = stdscr
         curses = self.curses
         self._set_cursor(False)
@@ -680,9 +689,10 @@ class DualSetupApp:
             raise SetupCancelled("Hermes installation was declined; no changes were applied")
         self.state.with_browser = choice == 1
 
+        assert self._temp_dir is not None
         installer = self._temp_dir / "hermes-install.sh"
 
-        def download_task(log):
+        def download_task(log: Callable[[str], None]) -> None:
             log(f"Downloading: {OFFICIAL_HERMES_INSTALLER}")
             receipt = download_https(
                 OFFICIAL_HERMES_INSTALLER,
@@ -707,7 +717,8 @@ class DualSetupApp:
                 f"SHA-256: {receipt.sha256}",
                 f"Size:    {receipt.bytes} bytes",
                 "",
-                "Browser automation: " + ("included" if self.state.with_browser else "not included"),
+                "Browser automation: "
+                + ("included" if self.state.with_browser else "not included"),
                 "",
                 "The Dual Memory Router bootstrap never invokes sudo. The upstream Hermes "
                 "installer may request OS-package privileges on some systems; its output is "
@@ -719,7 +730,7 @@ class DualSetupApp:
         if not approved:
             raise SetupCancelled("Hermes installation was not approved")
 
-        def install_task(log):
+        def install_task(log: Callable[[str], None]) -> None:
             self.state.runtime = install_official_hermes(
                 self.state.hermes_home,
                 installer=installer,
@@ -872,7 +883,9 @@ class DualSetupApp:
         return None
 
     def _review(self) -> None:
-        mode = "Hindsight Cloud" if self.state.hindsight_mode == "cloud" else "self-hosted Hindsight"
+        mode = (
+            "Hindsight Cloud" if self.state.hindsight_mode == "cloud" else "self-hosted Hindsight"
+        )
         lines = [
             f"Hermes home:       {self.state.hermes_home}",
             f"Namespace:         {self.state.namespace}",
@@ -910,13 +923,14 @@ class DualSetupApp:
 
     def _apply(self) -> None:
         assert self.state.runtime is not None
+        runtime = self.state.runtime
         backup: Path | None = None
 
-        def apply_task(log):
+        def apply_task(log: Callable[[str], None]) -> None:
             nonlocal backup
             log("Installing the router in Hermes' Python environment")
             install_router_into_runtime(
-                self.state.runtime,
+                runtime,
                 package_source=self.state.package_source,
                 dual=True,
                 hermes_home=self.state.hermes_home,
@@ -931,7 +945,7 @@ class DualSetupApp:
             try:
                 log("Installing the Hermes memory-provider entry")
                 install_plugin_entry(
-                    self.state.runtime,
+                    runtime,
                     hermes_home=self.state.hermes_home,
                     log=log,
                 )
@@ -979,18 +993,18 @@ class DualSetupApp:
 
                 log("Verifying Hindsight and Mnemosyne inside Hermes' Python runtime")
                 self.state.status = verify_router_in_runtime(
-                    self.state.runtime,
+                    runtime,
                     hermes_home=self.state.hermes_home,
                 )
+                backend_payload = self.state.status.get("backends", {})
+                backends = backend_payload if isinstance(backend_payload, dict) else {}
                 unhealthy = [
                     name
-                    for name, payload in self.state.status.get("backends", {}).items()
-                    if not bool(payload.get("ok"))
+                    for name, payload in backends.items()
+                    if isinstance(payload, dict) and not bool(payload.get("ok"))
                 ]
                 if unhealthy:
-                    raise ConfigurationError(
-                        "Backend verification failed: " + ", ".join(unhealthy)
-                    )
+                    raise ConfigurationError("Backend verification failed: " + ", ".join(unhealthy))
 
                 log("Activating hermes_memory_router as the sole external provider")
                 set_active_provider_with_hermes("hermes_memory_router", self.state.hermes_home)
@@ -999,7 +1013,7 @@ class DualSetupApp:
                     raise ConfigurationError(
                         "Hermes did not activate the router as the sole external provider"
                     )
-                command_link = link_router_command(self.state.runtime)
+                command_link = link_router_command(runtime)
                 log(f"Router command linked at {command_link}")
                 log("Strict dual mode activated")
             except BaseException:
@@ -1016,8 +1030,8 @@ class DualSetupApp:
         lines = [
             "STRICT DUAL MODE IS ACTIVE",
             "",
-            f"Hindsight:  automatic memory / recall / reflect",
-            f"Mnemosyne:  verified checkpoints / bounded fallback",
+            "Hindsight:  automatic memory / recall / reflect",
+            "Mnemosyne:  verified checkpoints / bounded fallback",
             f"Backup:     {backup}",
             f"Setup log:  {log_path}",
             "",

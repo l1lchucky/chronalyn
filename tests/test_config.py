@@ -1,4 +1,5 @@
 import json
+
 import pytest
 
 from hermes_memory_router.config import load_config, write_default_config
@@ -23,23 +24,31 @@ def test_unknown_keys_are_rejected(tmp_path):
 
 def test_unsafe_bank_name_rejected(tmp_path):
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({
-        "namespace": "a",
-        "environment": "b",
-        "hindsight": {"bank_id": "../escape"},
-        "mnemosyne": {"bank": "safe-checkpoints"},
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "namespace": "a",
+                "environment": "b",
+                "hindsight": {"bank_id": "../escape"},
+                "mnemosyne": {"bank": "safe-checkpoints"},
+            }
+        )
+    )
     with pytest.raises(ConfigurationError):
         load_config(path)
 
 
 def test_equal_bank_names_rejected(tmp_path):
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({
-        "namespace": "a",
-        "environment": "b",
-        "hindsight": {"bank_id": "same"},
-        "mnemosyne": {"bank": "same"},
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "namespace": "a",
+                "environment": "b",
+                "hindsight": {"bank_id": "same"},
+                "mnemosyne": {"bank": "same"},
+            }
+        )
+    )
     with pytest.raises(ConfigurationError, match="different"):
         load_config(path)

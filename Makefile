@@ -17,10 +17,13 @@ build:
 
 check: compile shell hygiene test build
 
+hygiene:
+	python scripts/check-release-tree.py
+
 quality:
-	ruff check .
-	ruff format --check .
-	mypy
+	ruff check src tests
+	ruff format --check src tests
+	mypy src
 
 audit:
 	pip-audit

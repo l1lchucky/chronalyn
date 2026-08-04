@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from .config import RouterConfig
 
 VERIFICATION_LEVELS = [
@@ -16,7 +18,7 @@ VERIFICATION_LEVELS = [
 ]
 
 
-def _retain_schema() -> dict:
+def _retain_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_retain",
         "description": (
@@ -35,7 +37,7 @@ def _retain_schema() -> dict:
     }
 
 
-def _checkpoint_schema() -> dict:
+def _checkpoint_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_checkpoint",
         "description": (
@@ -58,7 +60,7 @@ def _checkpoint_schema() -> dict:
     }
 
 
-def _recall_schema() -> dict:
+def _recall_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_recall",
         "description": (
@@ -76,7 +78,7 @@ def _recall_schema() -> dict:
     }
 
 
-def _reflect_schema() -> dict:
+def _reflect_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_reflect",
         "description": "Ask Hindsight to synthesize an answer from primary memory.",
@@ -88,7 +90,7 @@ def _reflect_schema() -> dict:
     }
 
 
-def _status_schema() -> dict:
+def _status_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_status",
         "description": "Show policy, isolation binding, outbox, worker, and backend health.",
@@ -96,7 +98,7 @@ def _status_schema() -> dict:
     }
 
 
-def _forget_plan_schema() -> dict:
+def _forget_plan_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_forget_plan",
         "description": (
@@ -111,7 +113,7 @@ def _forget_plan_schema() -> dict:
     }
 
 
-def _forget_apply_schema() -> dict:
+def _forget_apply_schema() -> dict[str, Any]:
     return {
         "name": "memory_router_forget_apply",
         "description": (
@@ -128,7 +130,7 @@ def _forget_apply_schema() -> dict:
     }
 
 
-def tool_schemas_for(config: RouterConfig) -> list[dict]:
+def tool_schemas_for(config: RouterConfig) -> list[dict[str, Any]]:
     schemas = [_recall_schema(), _reflect_schema(), _status_schema()]
     if config.tools.profile == "standard":
         schemas.insert(0, _checkpoint_schema())

@@ -1,6 +1,3 @@
-import time
-
-
 def drain_all(router, loops=10):
     for _ in range(loops):
         if not router.drain_outbox(100):
@@ -22,7 +19,7 @@ def test_automatic_turn_writes_primary_only(router):
 
 
 def test_non_primary_context_is_not_retained(router):
-    instance, primary, checkpoint = router
+    instance, primary, _checkpoint = router
     result = instance.retain_turn(
         user_content="cron",
         assistant_content="noise",
@@ -68,7 +65,7 @@ def test_duplicate_checkpoint_is_idempotent(router):
 
 
 def test_failed_delivery_retries(router):
-    instance, primary, checkpoint = router
+    instance, _primary, checkpoint = router
     checkpoint.fail_retain = 1
     result = instance.checkpoint_record(
         content="Retry this verified checkpoint.",
@@ -100,7 +97,7 @@ def test_forget_schedules_both_backends(router):
 
 
 def test_failed_delete_is_retryable(router):
-    instance, primary, checkpoint = router
+    instance, _primary, checkpoint = router
     result = instance.checkpoint_record(
         content="Checkpoint delete retry.",
         verification_level="environment-verified",
@@ -126,6 +123,26 @@ def test_status_reports_outbox(router):
     status = instance.status()
     assert status["store"]["deliveries"]["pending"] == 2
     assert status["routing"]["automatic_write"] == "hindsight-only"
+    assert status["versions"]["router"]
+    assert status["versions"]["configuration_schema"] == 2
+    assert status["versions"]["database_schema"] == 2
+    assert status["versions"]["python"]
+    assert status["versions"]["sqlite"]
+    assert status["deliveries"]["pending"] == 2
+    assert status["oldest_incomplete_delivery"]["state"] == "pending"
+    assert status["database"]["size_bytes"] > 0
+    assert status["health"]["state"] == "warning"
+
+
+def test_status_does_not_deliver_pending_work(router):
+    instance, primary, _ = router
+    instance.checkpoint_record(
+        content="Status must not deliver.",
+        verification_level="tested",
+        evidence="status is read-only",
+    )
+    instance.status()
+    assert primary.retained == {}
 
 
 def test_forget_before_delivery_cancels_retains(router):
@@ -145,7 +162,7 @@ def test_forget_before_delivery_cancels_retains(router):
 
 
 def test_max_attempts_becomes_dead_and_manual_retry_recovers(router):
-    instance, primary, checkpoint = router
+    instance, _primary, checkpoint = router
     instance.config.routing.max_attempts = 1
     checkpoint.fail_retain = 1
     result = instance.checkpoint_record(
@@ -177,7 +194,7 @@ def test_checkpoint_metadata_is_sanitized_before_backend_delivery(router):
 
 
 def test_backend_error_is_redacted_before_store(router):
-    instance, primary, checkpoint = router
+    instance, _primary, checkpoint = router
     checkpoint.fail_retain = 1
     original = checkpoint.retain
 
@@ -193,10 +210,14 @@ def test_backend_error_is_redacted_before_store(router):
         evidence="controlled backend error",
     )
     instance.drain_outbox(100)
-    row = instance.store._connection().execute(
-        "SELECT last_error FROM deliveries WHERE record_id=? AND backend='mnemosyne'",
-        (result.record_id,),
-    ).fetchone()
+    row = (
+        instance.store._connection()
+        .execute(
+            "SELECT last_error FROM deliveries WHERE record_id=? AND backend='mnemosyne'",
+            (result.record_id,),
+        )
+        .fetchone()
+    )
     assert fake_bearer not in row["last_error"]
     assert "[REDACTED]" in row["last_error"]
     checkpoint.retain = original
