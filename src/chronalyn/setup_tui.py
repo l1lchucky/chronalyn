@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import identity
 from .bootstrap import (
     OFFICIAL_HERMES_INSTALLER,
     DownloadReceipt,
@@ -38,7 +39,8 @@ from .config import new_config, write_config
 from .exceptions import ConfigurationError
 from .policy import HINDSIGHT_MNEMOSYNE
 
-BRAND = "DUAL MEMORY ROUTER"
+# Screen banner. Distinct from identity.BRAND, which is the product name.
+BRAND = "CHRONALYN"
 SUBTITLE = "STRICT HINDSIGHT + MNEMOSYNE SETUP"
 MIN_WIDTH = 72
 MIN_HEIGHT = 22
@@ -903,7 +905,7 @@ class DualSetupApp:
             "  3. Back up Hermes, Hindsight, router, and secret configuration.",
             "  4. Write strict profile-scoped configuration.",
             "  5. Verify both backends before activating the router.",
-            "  6. Activate hermes_memory_router as the sole external provider.",
+            "  6. Activate chronalyn as the sole external provider.",
             "",
             "No historical memory migration. No telemetry. No raw tool-message retention. No core patching.",
         ]
@@ -939,7 +941,7 @@ class DualSetupApp:
             log("Creating rollback backup before plugin or configuration changes")
             backup = backup_configuration(
                 self.state.hermes_home,
-                reason="dual memory router setup 0.2.0-beta.1",
+                reason=f"{identity.BRAND} {identity.RELEASE_NAME} guided setup",
             )
             self.state.backup_path = backup
             try:
@@ -1006,15 +1008,16 @@ class DualSetupApp:
                 if unhealthy:
                     raise ConfigurationError("Backend verification failed: " + ", ".join(unhealthy))
 
-                log("Activating hermes_memory_router as the sole external provider")
-                set_active_provider_with_hermes("hermes_memory_router", self.state.hermes_home)
+                log(f"Activating {identity.PROVIDER_ID} as the sole external provider")
+                set_active_provider_with_hermes(identity.PROVIDER_ID, self.state.hermes_home)
                 final = discover(self.state.hermes_home)
-                if final.active_providers != ("hermes_memory_router",):
+                if final.active_providers != (identity.PROVIDER_ID,):
                     raise ConfigurationError(
-                        "Hermes did not activate the router as the sole external provider"
+                        f"Hermes did not activate {identity.PROVIDER_ID} as the sole "
+                        "external memory provider"
                     )
                 command_link = link_router_command(runtime)
-                log(f"Router command linked at {command_link}")
+                log(f"{identity.BRAND} command linked at {command_link}")
                 log("Strict dual mode activated")
             except BaseException:
                 if backup is not None:
@@ -1038,15 +1041,15 @@ class DualSetupApp:
             "Next checks:",
             "  hermes setup            # configure model/gateway if this was a fresh Hermes install",
             "  hermes memory status",
-            "  hermes-memory-router status",
+            f"  {identity.CLI_COMMAND} status",
             "  ./scripts/live-smoke-test.sh",
             "",
             "Rollback never deletes memory data:",
-            "  hermes-memory-router rollback --yes",
+            f"  {identity.CLI_COMMAND} rollback --yes",
         ]
         self._show_info(
             "COMPLETE",
-            "Dual Memory Router is ready",
+            f"{identity.BRAND} {identity.RELEASE_NAME} is ready",
             lines,
             continue_label="ENTER exit setup",
             allow_back=False,

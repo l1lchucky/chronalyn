@@ -1,4 +1,4 @@
-from hermes_memory_router.factory import _read_profile_env_value
+from chronalyn.factory import _read_profile_env_value
 
 
 def test_profile_env_value_is_exact_and_non_shell(tmp_path):

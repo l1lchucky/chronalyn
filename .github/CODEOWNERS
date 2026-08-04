@@ -1,7 +1,11 @@
 * @l1lchucky
 /.github/ @l1lchucky
-/src/hermes_memory_router/redaction.py @l1lchucky
-/src/hermes_memory_router/store.py @l1lchucky
-/src/hermes_memory_router/provider.py @l1lchucky
+/src/chronalyn/identity.py @l1lchucky
+/src/chronalyn/plugin_entry.py @l1lchucky
+/src/chronalyn/redaction.py @l1lchucky
+/src/chronalyn/store.py @l1lchucky
+/src/chronalyn/provider.py @l1lchucky
+/src/chronalyn/compatibility.py @l1lchucky
+/src/hermes_memory_router/ @l1lchucky
 /pyproject.toml @l1lchucky
 /SECURITY.md @l1lchucky

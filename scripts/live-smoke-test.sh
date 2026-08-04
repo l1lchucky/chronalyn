@@ -2,10 +2,10 @@
 set -euo pipefail
 
 hermes_home="${HERMES_HOME:-$HOME/.hermes}"
-marker="HMR-SMOKE-$(date +%s)"
+marker="CHRONALYN-SMOKE-$(date +%s)"
 
-hermes-memory-router validate >/dev/null
-hermes-memory-router status
+chronalyn validate >/dev/null
+chronalyn status
 printf 'Marker for interactive Hermes test: %s\n' "$marker"
 
 cat <<EOF

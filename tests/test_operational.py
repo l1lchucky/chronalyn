@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from hermes_memory_router.config import new_config
-from hermes_memory_router.exceptions import ConfigurationError
-from hermes_memory_router.health import collect_health
-from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE
-from hermes_memory_router.store import RouterStore
+from chronalyn.config import new_config
+from chronalyn.exceptions import ConfigurationError
+from chronalyn.health import collect_health
+from chronalyn.policy import HINDSIGHT_MNEMOSYNE
+from chronalyn.store import RouterStore
 
 
 def make_store(tmp_path: Path) -> RouterStore:

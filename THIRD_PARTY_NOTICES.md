@@ -1,6 +1,6 @@
 # Third-party notices
 
-Hermes Memory Router integrates with but does not redistribute:
+Chronalyn integrates with but does not redistribute:
 
 - Hermes Agent — MIT License, Nous Research contributors
 - Hindsight — MIT License, Vectorize contributors

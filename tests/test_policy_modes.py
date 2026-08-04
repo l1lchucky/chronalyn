@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from chronalyn.config import new_config
+from chronalyn.policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
+from chronalyn.router import MemoryRouter
+from chronalyn.store import RouterStore
 from conftest import FakeBackend
-from hermes_memory_router.config import new_config
-from hermes_memory_router.policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
-from hermes_memory_router.router import MemoryRouter
-from hermes_memory_router.store import RouterStore
 
 
 def test_hindsight_only_policy_has_no_fallback(tmp_path):

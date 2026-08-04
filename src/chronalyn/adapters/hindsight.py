@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from .. import identity
 from ..config import HindsightConfig
 from ..exceptions import BackendOperationError
 from ..models import BackendReceipt, MemoryHit
@@ -31,7 +32,7 @@ class HindsightBackend(MemoryBackend):
     def _headers(self) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "hermes-memory-router/0.2.0-beta.1",
+            "User-Agent": identity.USER_AGENT,
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"

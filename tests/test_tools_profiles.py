@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from hermes_memory_router.config import RouterConfig
-from hermes_memory_router.tools import tool_schemas_for
+from chronalyn.config import RouterConfig
+from chronalyn.tools import tool_schemas_for
 
 
 def names(config):

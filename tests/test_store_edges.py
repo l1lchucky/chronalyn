@@ -1,6 +1,6 @@
 import pytest
 
-from hermes_memory_router.store import RouterStore
+from chronalyn.store import RouterStore
 
 
 def make(store, backends=None):

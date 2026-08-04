@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from hermes_memory_router.config import RouterConfig
-from hermes_memory_router.models import MemoryHit
-from hermes_memory_router.provider import HermesMemoryRouterProvider
+from chronalyn.config import RouterConfig
+from chronalyn.models import MemoryHit
+from chronalyn.provider import HermesMemoryRouterProvider
 
 
 class RouterStub:
     def recall(self, *, query, limit):
-        from hermes_memory_router.models import RecallResult
+        from chronalyn.models import RecallResult
 
         return RecallResult(
             hits=[MemoryHit("fact", source="hindsight")],

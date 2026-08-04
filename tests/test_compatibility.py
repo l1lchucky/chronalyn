@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-from hermes_memory_router.compatibility import (
+import pytest
+
+from chronalyn import identity
+from chronalyn.compatibility import (
     active_memory_providers,
     backup_configuration,
     discover,
@@ -10,6 +13,7 @@ from hermes_memory_router.compatibility import (
     restore_backup,
     set_active_provider_with_hermes,
 )
+from chronalyn.exceptions import ConfigurationError
 
 
 def test_active_provider_reads_singular_and_plural(tmp_path):
@@ -17,6 +21,8 @@ def test_active_provider_reads_singular_and_plural(tmp_path):
     config.write_text("memory:\n  provider: hindsight\n")
     assert active_memory_providers(tmp_path) == ("hindsight",)
     config.write_text("memory:\n  providers: [hermes_memory_router, mnemosyne]\n")
+    # Values are reported verbatim from config; discovery never rewrites the
+    # user's configured provider id.
     assert active_memory_providers(tmp_path) == (
         "hermes_memory_router",
         "mnemosyne",
@@ -59,6 +65,20 @@ def test_backup_restore_removes_files_that_were_absent(tmp_path):
     assert "removed:memory-router/config.json" in restored
 
 
+def test_manual_activation_instruction_uses_canonical_provider_id(monkeypatch):
+    monkeypatch.setattr(
+        "chronalyn.compatibility.find_hermes_command",
+        lambda home=None: None,
+    )
+
+    with pytest.raises(ConfigurationError) as excinfo:
+        set_active_provider_with_hermes(identity.PROVIDER_ID)
+
+    message = str(excinfo.value)
+    assert f"hermes config set memory.provider {identity.PROVIDER_ID}" in message
+    assert identity.LEGACY_PROVIDER_ID not in message
+
+
 def test_activation_uses_selected_hermes_home(tmp_path, monkeypatch):
     hermes = tmp_path / "bin/hermes"
     hermes.parent.mkdir()
@@ -72,7 +92,7 @@ def test_activation_uses_selected_hermes_home(tmp_path, monkeypatch):
         stderr = ""
 
     monkeypatch.setattr(
-        "hermes_memory_router.compatibility.find_hermes_command",
+        "chronalyn.compatibility.find_hermes_command",
         lambda home=None: str(hermes),
     )
 
@@ -81,10 +101,10 @@ def test_activation_uses_selected_hermes_home(tmp_path, monkeypatch):
         captured["env"] = kwargs["env"]
         return Result()
 
-    monkeypatch.setattr("hermes_memory_router.compatibility.subprocess.run", fake_run)
-    set_active_provider_with_hermes("hermes_memory_router", tmp_path)
+    monkeypatch.setattr("chronalyn.compatibility.subprocess.run", fake_run)
+    set_active_provider_with_hermes("chronalyn", tmp_path)
     assert captured["env"]["HERMES_HOME"] == str(tmp_path)
-    assert captured["command"][-1] == "hermes_memory_router"
+    assert captured["command"][-1] == "chronalyn"
 
 
 def test_hindsight_config_supports_official_camelcase_aliases(tmp_path):
@@ -122,13 +142,25 @@ def test_active_provider_reads_block_list_without_yaml_dependency(tmp_path):
     )
 
 
+def test_legacy_provider_id_plus_other_provider_is_still_a_conflict(tmp_path):
+    """A pre-rename installation must not lose conflict detection."""
+    (tmp_path / "config.yaml").write_text("memory:\n  providers: [hermes_memory_router, honcho]\n")
+    state = discover(tmp_path)
+    assert state.conflicts
+    assert "sole active" in state.conflicts[0]
+
+
 def test_backup_restore_removes_new_plugin_entry(tmp_path):
+    """Rollback must remove entries created after the backup was taken.
+
+    The entry lives at Hermes' real discovery root, $HERMES_HOME/plugins/<id>/.
+    """
     backup = backup_configuration(tmp_path, reason="plugin rollback")
-    plugin = tmp_path / "plugins/memory/hermes_memory_router"
+    plugin = tmp_path / "plugins" / "chronalyn"
     plugin.mkdir(parents=True)
     (plugin / "__init__.py").write_text("new")
     (plugin / "plugin.yaml").write_text("new")
     restored = restore_backup(tmp_path, backup)
     assert not (plugin / "__init__.py").exists()
     assert not (plugin / "plugin.yaml").exists()
-    assert "removed:plugins/memory/hermes_memory_router/__init__.py" in restored
+    assert "removed:plugins/chronalyn/__init__.py" in restored

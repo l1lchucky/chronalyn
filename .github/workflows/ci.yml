@@ -13,7 +13,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -34,7 +34,7 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -46,15 +46,26 @@ jobs:
       - name: Smoke-test built wheel
         shell: bash
         run: |
-          python -m venv /tmp/hmr-wheel-test
-          /tmp/hmr-wheel-test/bin/pip install dist/*.whl
-          /tmp/hmr-wheel-test/bin/hermes-memory-router \
-            --hermes-home /tmp/hmr-home \
+          python -m venv /tmp/chronalyn-wheel-test
+          /tmp/chronalyn-wheel-test/bin/pip install dist/*.whl
+          (cd /tmp && /tmp/chronalyn-wheel-test/bin/python -c "import hermes_memory_router, chronalyn; assert hermes_memory_router.provider is chronalyn.provider")
+          /tmp/chronalyn-wheel-test/bin/chronalyn --version
+          /tmp/chronalyn-wheel-test/bin/chronalyn \
+            --hermes-home /tmp/chronalyn-home \
             init --namespace ci-project --environment staging
-          /tmp/hmr-wheel-test/bin/hermes-memory-router \
-            --hermes-home /tmp/hmr-home validate
-          /tmp/hmr-wheel-test/bin/hermes-memory-router \
-            --hermes-home /tmp/hmr-home install-plugin
-          test -f /tmp/hmr-home/plugins/memory/hermes_memory_router/__init__.py
-          test -f /tmp/hmr-home/plugins/memory/hermes_memory_router/plugin.yaml
+          /tmp/chronalyn-wheel-test/bin/chronalyn \
+            --hermes-home /tmp/chronalyn-home validate
+          /tmp/chronalyn-wheel-test/bin/chronalyn \
+            --hermes-home /tmp/chronalyn-home install-plugin
+          # Hermes discovers user memory providers at $HERMES_HOME/plugins/<id>/.
+          test -f /tmp/chronalyn-home/plugins/chronalyn/__init__.py
+          test -f /tmp/chronalyn-home/plugins/chronalyn/plugin.yaml
+          grep -q 'kind: exclusive' /tmp/chronalyn-home/plugins/chronalyn/plugin.yaml
+          grep -q 'register_memory_provider' /tmp/chronalyn-home/plugins/chronalyn/__init__.py
+          # The legacy provider id must remain loadable for existing installs.
+          test -f /tmp/chronalyn-home/plugins/hermes_memory_router/__init__.py
+          # The deprecated command must still work and warn on stderr.
+          /tmp/chronalyn-wheel-test/bin/hermes-memory-router \
+            --hermes-home /tmp/chronalyn-home validate 2> /tmp/deprecation.txt
+          grep -qi 'deprecated' /tmp/deprecation.txt
       - run: python -m pip check

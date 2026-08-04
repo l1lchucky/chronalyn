@@ -1,8 +1,8 @@
 import pytest
 
-from hermes_memory_router.config import RedactionConfig
-from hermes_memory_router.exceptions import SecretDetected
-from hermes_memory_router.redaction import sanitize
+from chronalyn.config import RedactionConfig
+from chronalyn.exceptions import SecretDetected
+from chronalyn.redaction import sanitize
 
 FAKE_BEARER = "-".join(("demo", "token", "not", "secret")) * 2
 
@@ -67,7 +67,7 @@ def test_redacts_openai_style_key_without_literal_secret_fixture():
 
 
 def test_metadata_sensitive_key_is_redacted():
-    from hermes_memory_router.redaction import sanitize_metadata
+    from chronalyn.redaction import sanitize_metadata
 
     result = sanitize_metadata(
         {"nested": {"api_key": "plain-value", "safe": "ok"}},
@@ -79,14 +79,14 @@ def test_metadata_sensitive_key_is_redacted():
 
 
 def test_metadata_sensitive_key_rejects_in_strict_mode():
-    from hermes_memory_router.redaction import sanitize_metadata
+    from chronalyn.redaction import sanitize_metadata
 
     with pytest.raises(SecretDetected):
         sanitize_metadata({"refresh_token": "plain-value"}, RedactionConfig(mode="reject"))
 
 
 def test_metadata_containers_are_bounded():
-    from hermes_memory_router.redaction import sanitize_metadata
+    from chronalyn.redaction import sanitize_metadata
 
     result = sanitize_metadata(list(range(20)), RedactionConfig(), max_items=5)
     assert result.value == [0, 1, 2, 3, 4]

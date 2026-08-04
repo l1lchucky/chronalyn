@@ -5,8 +5,8 @@ These commands operate only on the database selected by the validated router con
 ## Information
 
 ```bash
-hermes-memory-router db info
-hermes-memory-router --json db info
+chronalyn db info
+chronalyn --json db info
 ```
 
 The output includes the database schema version, namespace/environment/profile binding, delivery counts, oldest incomplete delivery, and database/WAL/SHM sizes.
@@ -14,7 +14,7 @@ The output includes the database schema version, namespace/environment/profile b
 ## Integrity check
 
 ```bash
-hermes-memory-router db check
+chronalyn db check
 ```
 
 This runs SQLite `integrity_check` without starting backends. Exit code `0` means SQLite returned `ok`; exit code `3` means the database is unsafe to use. Stop Hermes and investigate before modifying a database that fails this check.
@@ -22,8 +22,8 @@ This runs SQLite `integrity_check` without starting backends. Exit code `0` mean
 ## Online backup
 
 ```bash
-hermes-memory-router db backup --output /secure/path/router.sqlite
-hermes-memory-router db verify-backup --path /secure/path/router.sqlite
+chronalyn db backup --output /secure/path/router.sqlite
+chronalyn db verify-backup --path /secure/path/router.sqlite
 ```
 
 The backup uses SQLite's online backup API, so committed WAL data is included consistently. Existing destinations are never overwritten. A sibling file named `router.sqlite.manifest.json` is created.
@@ -64,7 +64,7 @@ A router database backup does not include Hindsight data, Mnemosyne data, profil
 ## Vacuum
 
 ```bash
-hermes-memory-router db vacuum --yes
+chronalyn db vacuum --yes
 ```
 
 Vacuum rewrites the disposable/configured database and can require temporary disk space and an exclusive lock. It requires `--yes`. Take and verify a backup first, stop active router processes, and never point a test at a live production database.

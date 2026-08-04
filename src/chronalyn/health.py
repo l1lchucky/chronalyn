@@ -4,11 +4,12 @@ import platform
 import sqlite3
 from typing import Any
 
+from . import identity
 from .config import CONFIG_SCHEMA_VERSION, RouterConfig
 from .store import RouterStore
 
 HEALTH_EXIT_CODES = {"healthy": 0, "warning": 0, "degraded": 1, "unsafe": 3}
-ROUTER_VERSION = "0.2.0b1"
+ROUTER_VERSION = identity.VERSION
 
 
 def collect_health(

@@ -6,7 +6,7 @@ silently changing memory behavior.
 ## Read-only discovery
 
 ```bash
-hermes-memory-router detect
+chronalyn detect
 ```
 
 The command reports:
@@ -24,7 +24,7 @@ Discovery does not write configuration, contact a backend, or restart Hermes.
 Preview the change:
 
 ```bash
-hermes-memory-router adopt \
+chronalyn adopt \
   --namespace my-project \
   --environment staging \
   --policy hindsight-only \
@@ -42,8 +42,8 @@ Install the optional dependency, preview the plan, then apply it:
 
 ```bash
 python -m pip install '.[mnemosyne]'
-hermes-memory-router provider add mnemosyne --dry-run
-hermes-memory-router provider add mnemosyne
+chronalyn provider add mnemosyne --dry-run
+chronalyn provider add mnemosyne
 ```
 
 This changes future checkpoint routing. It does not copy old Hindsight memories.
@@ -51,8 +51,8 @@ This changes future checkpoint routing. It does not copy old Hindsight memories.
 Remove Mnemosyne routing with:
 
 ```bash
-hermes-memory-router provider remove mnemosyne --dry-run
-hermes-memory-router provider remove mnemosyne
+chronalyn provider remove mnemosyne --dry-run
+chronalyn provider remove mnemosyne
 ```
 
 The Mnemosyne database is preserved unless the operator removes it separately.
@@ -71,7 +71,7 @@ timestamped backup directory.
 Restore the newest backup with:
 
 ```bash
-hermes-memory-router rollback --yes
+chronalyn rollback --yes
 ```
 
 Rollback restores configuration. It does not delete Hindsight or Mnemosyne data.

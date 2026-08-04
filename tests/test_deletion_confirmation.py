@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from hermes_memory_router.exceptions import ConfigurationError
+from chronalyn.exceptions import ConfigurationError
 
 
 def _checkpoint(instance):

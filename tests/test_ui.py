@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import time
 
-from hermes_memory_router.ui import PacmanLoader
+from chronalyn.ui import PacmanLoader
 
 
 class TTY(io.StringIO):

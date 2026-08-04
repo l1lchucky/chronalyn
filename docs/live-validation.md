@@ -11,20 +11,20 @@ environment, database, and preferably a separate host.
 ## 1. Install and discover the plugin
 
 ```bash
-python -m pip install ./hermes_memory_router-0.2.0b1-py3-none-any.whl
-hermes-memory-router install-plugin
-hermes-memory-router setup-dual
+python -m pip install ./chronalyn-1.0.0rc1-py3-none-any.whl
+chronalyn install-plugin
+chronalyn setup
 hermes memory status
 ```
 
-Pass: Hermes reports `hermes_memory_router` as the only external memory provider
+Pass: Hermes reports `chronalyn` as the only external memory provider
 and exposes only the expected router tools.
 
 ## 2. Check backend health
 
 ```bash
-hermes-memory-router validate
-hermes-memory-router status
+chronalyn validate
+chronalyn status
 ```
 
 Pass: the configured backends are healthy and no delivery is failed or dead.
@@ -62,8 +62,8 @@ result stays inside `fallback_max_chars`.
 Make one backend unavailable, create a checkpoint, restore the backend, then run:
 
 ```bash
-hermes-memory-router retry
-hermes-memory-router drain --limit 100
+chronalyn retry
+chronalyn drain --limit 100
 ```
 
 Pass: the failed delivery completes without a duplicate record.

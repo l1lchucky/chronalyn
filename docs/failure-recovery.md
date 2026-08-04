@@ -3,10 +3,10 @@
 ## Start with status
 
 ```bash
-hermes-memory-router validate
-hermes-memory-router status
-hermes-memory-router doctor
-hermes-memory-router db check
+chronalyn validate
+chronalyn status
+chronalyn doctor
+chronalyn db check
 journalctl --user -u hermes-gateway.service -n 200 --no-pager
 ```
 
@@ -18,14 +18,14 @@ warning, degraded, and unsafe conditions. Database integrity failure is unsafe.
 Retry everything marked failed or dead:
 
 ```bash
-hermes-memory-router retry
-hermes-memory-router drain --limit 500
+chronalyn retry
+chronalyn drain --limit 500
 ```
 
 Retry one logical record:
 
 ```bash
-hermes-memory-router retry --record-id mr_...
+chronalyn retry --record-id mr_...
 ```
 
 ## Hindsight is down

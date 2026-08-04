@@ -1,5 +1,5 @@
-from hermes_memory_router.adapters.hindsight import HindsightBackend
-from hermes_memory_router.config import HindsightConfig
+from chronalyn.adapters.hindsight import HindsightBackend
+from chronalyn.config import HindsightConfig
 
 
 class StubHindsight(HindsightBackend):

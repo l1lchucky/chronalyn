@@ -15,11 +15,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from . import identity
 from .exceptions import ConfigurationError
 from .policy import HINDSIGHT_MNEMOSYNE
 
-ROUTER_PROVIDER = "hermes_memory_router"
-CHILD_PROVIDERS = {"hindsight", "mnemosyne"}
+#: Preferred provider id. ``ROUTER_PROVIDERS`` also contains the legacy id so an
+#: existing ``memory.provider: hermes_memory_router`` installation is still
+#: recognised as *this* router rather than as a foreign provider.
+ROUTER_PROVIDER = identity.PROVIDER_ID
+ROUTER_PROVIDERS = identity.PROVIDER_IDS
+CHILD_PROVIDERS = set(identity.CHILD_PROVIDERS)
 _REQUIRED_MEMORY_METHODS = {
     "is_available",
     "initialize",
@@ -229,10 +234,11 @@ def discover(hermes_home: Path) -> HermesDiscovery:
     hindsight = read_hindsight_config(hermes_home)
     mnemosyne_version = _package_version("mnemosyne-memory", "mnemosyne")
     conflicts: list[str] = []
-    if ROUTER_PROVIDER in providers and providers != (ROUTER_PROVIDER,):
+    router_ids = tuple(name for name in providers if identity.is_provider_id(name))
+    if router_ids and tuple(providers) != router_ids[:1]:
         conflicts.append(
-            "The router must be the sole active external memory provider; leave only "
-            "hermes_memory_router in Hermes memory configuration."
+            f"{identity.BRAND} must be the sole active external memory provider; "
+            f"leave only {identity.PROVIDER_ID} in Hermes memory configuration."
         )
     if len(set(providers)) != len(providers):
         conflicts.append("Hermes memory provider list contains duplicate names.")
@@ -292,23 +298,42 @@ def require_strict_hermes_compatibility(hermes_home: Path) -> HermesDiscovery:
     return state
 
 
+def managed_backup_paths(hermes_home: Path) -> tuple[Path, ...]:
+    """Return every file the router may change and must therefore back up.
+
+    Provider entries are listed at Hermes' real discovery root
+    (``$HERMES_HOME/plugins/<provider-id>/``) for BOTH the canonical and the
+    legacy provider id, so a rollback restores whichever entry was installed.
+    Backend data (Hindsight/Mnemosyne stores) is deliberately excluded: it is
+    never copied, moved or deleted by configuration changes.
+    """
+    paths: list[Path] = [
+        hermes_home / "config.yaml",
+        hermes_home / identity.STATE_DIRNAME / identity.CONFIG_FILENAME,
+        hermes_home / "hindsight" / "config.json",
+        hermes_home / ".env",
+    ]
+    for provider_id in identity.PROVIDER_IDS:
+        entry = hermes_home / "plugins" / provider_id
+        paths.extend(
+            (
+                entry / "__init__.py",
+                entry / "plugin.yaml",
+                entry / ".chronalyn-managed",
+            )
+        )
+    return tuple(paths)
+
+
 def backup_configuration(hermes_home: Path, *, reason: str) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    target = hermes_home / "memory-router" / "backups" / stamp
+    target = hermes_home / identity.STATE_DIRNAME / "backups" / stamp
     target.mkdir(parents=True, exist_ok=False)
     with suppress(OSError):
         target.chmod(0o700)
     copied: list[str] = []
     absent: list[str] = []
-    managed = (
-        hermes_home / "config.yaml",
-        hermes_home / "memory-router" / "config.json",
-        hermes_home / "hindsight" / "config.json",
-        hermes_home / ".env",
-        hermes_home / "plugins" / "memory" / "hermes_memory_router" / "__init__.py",
-        hermes_home / "plugins" / "memory" / "hermes_memory_router" / "plugin.yaml",
-    )
-    for source in managed:
+    for source in managed_backup_paths(hermes_home):
         relative = source.relative_to(hermes_home).as_posix()
         if source.exists():
             destination = target / relative
@@ -392,7 +417,7 @@ def set_active_provider_with_hermes(
     if not hermes:
         raise ConfigurationError(
             "Hermes CLI is not available; configuration was not activated. "
-            "Run `hermes config set memory.provider hermes_memory_router` manually."
+            f"Run `hermes config set memory.provider {identity.PROVIDER_ID}` manually."
         )
     environment = os.environ.copy()
     if hermes_home is not None:

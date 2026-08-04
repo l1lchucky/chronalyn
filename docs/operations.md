@@ -2,11 +2,11 @@
 
 ## Status and doctor
 
-`hermes-memory-router status` is a quick operational snapshot. It reports versions,
+`chronalyn status` is a quick operational snapshot. It reports versions,
 the active policy and binding, backend health, delivery counts and age, database
 file sizes, and an overall state. It does not run SQLite integrity checking.
 
-`hermes-memory-router doctor` performs the same bounded backend checks and maps the
+`chronalyn doctor` performs the same bounded backend checks and maps the
 result to an exit code suitable for monitoring:
 
 | State | Meaning | Exit code |
@@ -59,7 +59,7 @@ staging soak have actually completed.
 
 ## After a deployment
 
-1. Run `hermes-memory-router status`.
+1. Run `chronalyn status`.
 2. Create a harmless test checkpoint.
 3. Recall it.
 4. Delete it and confirm both backend deletes finish.

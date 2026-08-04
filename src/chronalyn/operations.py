@@ -103,7 +103,7 @@ def build_plan(
     return ConfigurationPlan(
         current_provider=(", ".join(state.active_providers) if state.active_providers else ""),
         current_hindsight_bank=bank,
-        proposed_provider="hermes_memory_router",
+        proposed_provider="chronalyn",
         primary_backend="hindsight",
         checkpoint_backend="mnemosyne" if dual else "",
         automatic_retention="Hindsight only",
@@ -202,9 +202,9 @@ def apply_plan(
     write_config(hermes_home / "memory-router" / "config.json", config)
     try:
         if activate_provider:
-            set_active_provider_with_hermes("hermes_memory_router", hermes_home)
+            set_active_provider_with_hermes("chronalyn", hermes_home)
             state = discover(hermes_home)
-            if state.active_providers != ("hermes_memory_router",):
+            if state.active_providers != ("chronalyn",):
                 raise ConfigurationError(
                     "Hermes did not activate the router as the sole external provider"
                 )

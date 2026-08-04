@@ -1,4 +1,4 @@
-from hermes_memory_router.models import MemoryHit
+from chronalyn.models import MemoryHit
 
 
 def test_primary_recall_wins(router):

@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from hermes_memory_router.store import RouterStore
+from chronalyn.store import RouterStore
 
 
 def test_store_is_namespace_scoped(tmp_path):
