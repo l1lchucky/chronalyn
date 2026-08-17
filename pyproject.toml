@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chronalyn"
-version = "1.0.0rc1"
-description = "Policy-enforced AI agent memory orchestration for Hermes Agent using Hindsight, Mnemosyne checkpoints, and durable SQLite delivery."
+version = "1.0.0"
+description = "Long-term memory orchestration for Hermes Agent with Hindsight and Mnemosyne."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -33,7 +33,7 @@ keywords = [
   "python",
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
@@ -80,14 +80,14 @@ chronalyn = "chronalyn.cli:main"
 hermes-memory-router = "chronalyn.compat_cli:main"
 
 [project.urls]
-Homepage = "https://github.com/l1lchucky/hermes-memory-router"
-Repository = "https://github.com/l1lchucky/hermes-memory-router"
-Issues = "https://github.com/l1lchucky/hermes-memory-router/issues"
-Changelog = "https://github.com/l1lchucky/hermes-memory-router/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/installation.md"
-"Migration Guide" = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/migration.md"
-Compatibility = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/compatibility.md"
-"Live Validation" = "https://github.com/l1lchucky/hermes-memory-router/blob/main/docs/live-validation.md"
+Homepage = "https://github.com/l1lchucky/chronalyn"
+Repository = "https://github.com/l1lchucky/chronalyn"
+Issues = "https://github.com/l1lchucky/chronalyn/issues"
+Changelog = "https://github.com/l1lchucky/chronalyn/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/l1lchucky/chronalyn/blob/main/docs/installation.md"
+"Migration Guide" = "https://github.com/l1lchucky/chronalyn/blob/main/docs/migration.md"
+Compatibility = "https://github.com/l1lchucky/chronalyn/blob/main/docs/compatibility.md"
+"Live Validation" = "https://github.com/l1lchucky/chronalyn/blob/main/docs/live-validation.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

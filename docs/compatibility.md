@@ -1,7 +1,7 @@
 # Compatibility
 
-Chronalyn is the public product identity. `1.0.0rc1` (`v1.0.0-rc.1`) is a
-release candidate, not a production-readiness claim.
+Chronalyn is the public product identity. Version 1.0.0 is the first
+stable release.
 
 ## Public and temporary compatibility names
 

@@ -80,7 +80,7 @@ There are two equivalent entry points into the same wizard:
 - **Native Hermes flow (recommended):**
 
   ```bash
-  hermes plugins install l1lchucky/hermes-memory-router
+  hermes plugins install l1lchucky/chronalyn
   hermes memory setup        # choose Chronalyn
   ```
 
@@ -106,24 +106,28 @@ There are two equivalent entry points into the same wizard:
   chronalyn setup
   ```
 
-Both run the same steps in order. Nothing is mutated before the
-preview is shown and confirmed.
+Both flows run the same logical phases in order. Nothing is mutated before the
+preview is shown and confirmed. Installation actions differ by origin:
 
-1. **Install Chronalyn** into Hermes' own Python runtime.
+1. **Ensure Chronalyn is available** — the native flow skips this (Hermes
+   already installed the plugin); the standalone flow installs Chronalyn into
+   Hermes' own Python runtime and writes the provider entries.
 2. **Detect the Hermes installation** — command path, runtime interpreter, and
    `MemoryProvider` contract availability.
 3. **Detect existing configuration** — the active `memory.provider`, any direct
    Hindsight configuration (endpoint, bank, mode), and whether Mnemosyne is
    installed.
-4. **Configure optional Mnemosyne** — offered explicitly. Installing
-   `mnemosyne-memory` does not enable it; enabling requires an explicit choice.
+4. **Configure optional Mnemosyne** — offered explicitly in dual mode only.
+   Installing `mnemosyne-memory` does not enable it; enabling requires an
+   explicit choice.
 5. **Preview every change** — current versus proposed provider, banks, routing
    policy, and an explicit statement that existing memories are preserved and no
    migration occurs. Remote endpoints require separate consent.
 6. **Back up configuration** — `config.yaml`, router config, Hindsight config,
    `.env`, and provider entries for both provider ids.
-7. **Activate** — write the provider entries, then set `memory.provider` through
-   the Hermes CLI.
+7. **Activate** — the native flow sets `memory.provider` through the Hermes CLI
+   without touching the Hermes-managed plugin directory; the standalone flow
+   writes provider entries and then sets `memory.provider`.
 8. **Validate** — re-read discovery and confirm Chronalyn is the sole active
    external provider; verify backend health before declaring success.
 9. **Roll back automatically** on any failure during activation.

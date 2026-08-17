@@ -37,10 +37,14 @@ def test_installer_version_matches_package_identity():
 def test_release_workflow_publishes_installer_and_checksums():
     workflow = Path(".github/workflows/release.yml").read_text()
     assert "cp scripts/install-dual.sh dist/install-dual.sh" in workflow
-    assert identity.CHECKSUMS in workflow
-    assert identity.SBOM in workflow
+    # Artifact names derive from the release tag, not a hard-coded version.
+    assert "TAG=${GITHUB_REF_NAME}" in workflow
+    assert "SHA256SUMS-chronalyn-${TAG}.txt" in workflow
+    assert "chronalyn-${TAG}.spdx.json" in workflow or "${SBOM_FILE}" in workflow
     assert "actions/attest@v4" in workflow
     assert 'subject-path: "dist/*"' in workflow
+    # The RC-era hard-coded artifact name must be gone.
+    assert "v1.0.0-rc.1" not in workflow
 
 
 def test_workflows_use_only_checkout_v6_and_ci_checks_wheel_import_shim():

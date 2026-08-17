@@ -4,53 +4,47 @@ This is a working plan, not a promise of dates or features. Priorities may move
 when upstream APIs change, testing uncovers a problem, or users report a better
 need.
 
-## 1.0.0-rc.1
+## Shipped in 1.0
 
-The beta focuses on being a well-behaved Hermes memory provider:
+- Hermes-native plugin installation (`hermes plugins install l1lchucky/chronalyn`).
+- Hindsight-only and dual-memory modes.
+- Hindsight-first recall with bounded Mnemosyne fallback.
+- Verified checkpoint routing to Mnemosyne in dual mode.
+- Provider-neutral semantic embedding configuration.
+- Mnemosyne LLM disabled by default.
+- Durable SQLite control state with retries and an outbox.
+- Safe two-step deletion flow.
+- Backup and rollback.
+- Native plugin lifecycle with data retention (update and remove never delete
+  durable memory).
+- Hermes' one-external-provider rule preserved.
 
-- one router remains the only external provider visible to Hermes;
-- Hindsight-only and dual-mode policies are both supported;
-- provider discovery is read-only until the user approves a plan;
-- package installation never activates Mnemosyne;
-- current Hindsight memories are preserved;
-- configuration changes are backed up and reversible;
-- router databases are tied to one Hermes profile, namespace, and environment;
-- recalled content is returned plainly so Hermes adds its own context fence;
-- the default Hermes tool list stays small;
-- model-requested deletion is disabled unless an operator enables the two-step
-  confirmation flow;
-- dual setup has a lightweight terminal interface with keyboard and optional
-  mouse support.
+## Near-term improvements
 
-## Next beta work
+- Test against supported Hermes releases in CI.
+- Add database integrity and migration commands.
+- Add a guided backup-and-restore check.
+- Expose simple metrics without requiring a monitoring stack.
+- Add repair tools for orphaned backend records.
+- Improve error messages using real staging feedback.
 
-- test against supported Hermes releases in CI;
-- report Hindsight and Mnemosyne versions in `status`;
-- add database integrity and migration commands;
-- add a guided backup-and-restore check;
-- expose simple metrics without requiring a monitoring stack;
-- add repair tools for orphaned backend records;
-- improve error messages using real staging feedback.
+## Future direction
 
-## Release-candidate work
+These are ideas, not commitments:
 
-- run longer staging soak tests;
-- test a controlled production canary;
-- publish backup and disaster-recovery results;
-- freeze the configuration format for `1.0`;
-- document supported dependency combinations;
-- test shutdown, restart, retry, and delete races with live services.
-
-## What must be true before 1.0
-
-- no known data-loss bug;
-- no known staging/production crossover bug;
-- no known provider-conflict regression;
-- safe configuration and database upgrades;
-- successful live fallback, retry, deletion, restart, and restore tests;
-- tested self-hosted and Hindsight Cloud installations;
-- signed release artifacts with an SBOM and provenance record;
-- a clear rollback and security-response process.
+- **Chronalyn → Skill candidate bridge** — surface repeated, verified successes
+  as candidate procedures for Hermes' skill review. Chronalyn remembers what
+  happened; Skills remember how to do it again. The bridge would propose, not
+  auto-write.
+- **Deterministic verification framework** — a framework that verifies actual
+  functionality after a repair, instead of trusting a command exit code.
+- **Safe diagnostic/self-healing tools** — read-only diagnosis first, explicit
+  repair actions only with operator consent.
+- **Observability** — optional metrics and traces for the control plane.
+- **Knowledge promotion** — explicit, user-approved promotion of local history
+  to shared knowledge; never automatic.
+- **Chronalyn Console** — a dashboard for the control plane.
+- **Chronalyn Intelligence** — change intelligence and deployment analysis.
 
 ## Other memory backends
 

@@ -4,7 +4,7 @@
 Hermes MemoryManager
         │
         ▼
-HermesMemoryRouterProvider
+ChronalynMemoryProvider
         │
         ├── routing policy and redaction
         ├── SQLite control database

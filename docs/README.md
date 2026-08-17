@@ -43,7 +43,8 @@ for verified checkpoints and bounded fallback; one provider visible to Hermes.
 ## Validation and development
 
 - [Live validation](live-validation.md) — real-backend test results
-- [RC limitations](rc-limitations.md) — release-candidate boundaries
+- [Limitations](limitations.md) — current limitations
+- [Release candidate limitations (historical)](rc-limitations.md)
 - [Upgrading](upgrading.md) — version upgrade paths
 - [Compatibility](compatibility.md) — Python and Hermes support
 - [Development](development.md) — build, test, lint, release

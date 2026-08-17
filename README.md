@@ -1,77 +1,61 @@
 # Chronalyn
 
-[![CI](https://github.com/l1lchucky/hermes-memory-router/actions/workflows/ci.yml/badge.svg)](https://github.com/l1lchucky/hermes-memory-router/actions/workflows/ci.yml)
-[![Security](https://github.com/l1lchucky/hermes-memory-router/actions/workflows/security.yml/badge.svg)](https://github.com/l1lchucky/hermes-memory-router/actions/workflows/security.yml)
+[![CI](https://github.com/l1lchucky/chronalyn/actions/workflows/ci.yml/badge.svg)](https://github.com/l1lchucky/chronalyn/actions/workflows/ci.yml)
+[![Security](https://github.com/l1lchucky/chronalyn/actions/workflows/security.yml/badge.svg)](https://github.com/l1lchucky/chronalyn/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Chronalyn is an open-source AI agent memory orchestration layer and memory
-provider for Hermes Agent. It coordinates Hindsight for persistent memory,
-recall, and reflection with Mnemosyne for verified checkpoints and bounded
-fallback, backed by durable SQLite delivery, retry, and deletion controls.
+**Give Hermes a past it can actually use.**
 
-**What is implemented today:** this release candidate delivers one thing —
-reliable memory orchestration for Hermes Agent, shipped as **Chronalyn for
-Hermes**. Chronalyn gives Hindsight and Mnemosyne separate jobs instead of
-letting them compete for every turn. Roadmap modules (Console, Intelligence)
-are **not implemented** in this release.
+Hermes already keeps important facts close. Chronalyn handles the deeper
+history behind them: what happened, what failed, what worked, and which states
+were verified.
 
-Hermes sees **one** external memory provider. Behind that provider:
+- **Hindsight** handles long-term semantic memory and recall.
+- **Mnemosyne** keeps verified checkpoints and provides bounded fallback.
 
-```text
-Hermes Agent
-    |
-    v
- Chronalyn
-    |
-    +-- Hindsight   persistent memory / recall / reflection
-    |
-    +-- Mnemosyne   verified checkpoints / bounded fallback
-```
-
-- **Hindsight** handles normal automatic memory, recall, and reflection.
-- **Mnemosyne** keeps deliberate, evidence-backed checkpoints and can act as a
-  small fallback when Hindsight is unavailable or has no answer.
-- A local **SQLite control database** tracks writes, retries, backend IDs,
-  deletions, and the active environment.
-
-Chronalyn is a **Hermes memory plugin**: install it from inside Hermes, then
-pick it as your memory provider.
+Chronalyn is a Hermes memory plugin — install it from inside Hermes and pick it
+as your memory provider:
 
 ```bash
-hermes plugins install l1lchucky/hermes-memory-router
+hermes plugins install l1lchucky/chronalyn
 hermes memory setup
 ```
 
-> **Current release:** `1.0.0rc1` (`v1.0.0-rc.1`) — a **release candidate**.
-> Local tests do not prove production readiness. Live Hindsight and Mnemosyne
-> testing plus a staging soak are still required. See
-> [RC limitations](docs/rc-limitations.md) and
-> [Live validation](docs/live-validation.md).
+## Three complementary memory layers
 
-### Roadmap, not yet built
+Chronalyn does not replace Hermes' own memory. They sit side by side:
 
-Chronalyn Console (dashboard), Chronalyn Intelligence (change intelligence),
-bug discovery, and deployment analysis are **future modules**. They are not part
-of this release candidate and are not implemented. See [ROADMAP.md](ROADMAP.md).
+```text
+Hermes Agent
+├── Native memory        important facts kept close (MEMORY.md / USER.md)
+├── Chronalyn
+│   ├── Hindsight        deeper history and semantic recall
+│   └── Mnemosyne        verified checkpoints / bounded fallback
+└── Skills               reusable procedures
+```
 
-### Renamed from Hermes Memory Router
+- **Hermes native memory** keeps the facts you want close: preferences, stable
+  facts about the user and the project.
+- **Chronalyn** remembers what happened: the deeper history behind those facts.
+- **Skills** remember how to do it again: reusable procedures.
 
-Chronalyn was previously released as Hermes Memory Router. Existing
-installations keep working: the old CLI, the old Hermes provider id, and the old
-import path all remain available as temporary compatibility aliases. Nothing is
-migrated without your explicit confirmation, and no memories are ever copied,
-recreated, or reindexed. See [Migration](docs/migration.md).
+Hermes sees **one** external memory provider — Chronalyn. Hindsight and
+Mnemosyne are internal Chronalyn backends. Hermes' memory manager orchestrates
+the built-in provider plus at most one external provider.
 
-## The policy in one screen
+## What Chronalyn does
+
+Chronalyn gives Hindsight and Mnemosyne separate jobs instead of letting them
+compete for every turn:
 
 ```text
 NORMAL TURN   -> HINDSIGHT only
-CHECKPOINT    -> HINDSIGHT + MNEMOSYNE
+CHECKPOINT    -> HINDSIGHT + MNEMOSYNE (dual mode)
 FAILOVER      -> bounded MNEMOSYNE checkpoints
 MERGED RECALL -> never
 ```
 
-That policy is intentionally narrow and is **unchanged** by the rename:
+That policy is intentionally narrow:
 
 - normal conversations are not copied into both systems;
 - recall results are not merged into one large prompt;
@@ -82,27 +66,10 @@ That policy is intentionally narrow and is **unchanged** by the rename:
 - destructive model-requested operations are disabled by default;
 - Chronalyn never patches Hermes core.
 
+Two modes are available: **Hindsight-only** (Hindsight handles every memory
+operation) and **dual memory** (Mnemosyne also keeps verified checkpoints).
+
 See [Routing policies](docs/routing-policies.md) for the exact rules.
-
-## How Hermes loads Chronalyn
-
-Chronalyn uses Hermes' public memory-provider contract. Nothing here relies on a
-private Hermes API, an invented entry-point group, or a modified Hermes core.
-
-```text
-$HERMES_HOME/plugins/chronalyn/            <- provider entry Hermes discovers
-$HERMES_HOME/plugins/hermes_memory_router/ <- compatibility alias (legacy id)
-```
-
-- Hermes discovers user-installed memory providers by scanning
-  `$HERMES_HOME/plugins/<provider-id>/`.
-- Each entry declares `kind: exclusive` in `plugin.yaml`, so Hermes' generic
-  plugin manager records the manifest without importing it and leaves activation
-  to the memory category.
-- Activation is a single supported config write: `memory.provider`.
-
-Details, including the exact discovery rules verified against a real Hermes
-installation, are in [Hermes integration](docs/hermes-integration.md).
 
 ## Install
 
@@ -116,7 +83,7 @@ Requirements:
 ### Recommended: install from Hermes
 
 ```bash
-hermes plugins install l1lchucky/hermes-memory-router
+hermes plugins install l1lchucky/chronalyn
 hermes memory setup
 ```
 
@@ -145,6 +112,26 @@ same wizard the Hermes flow runs.
 
 Full walkthrough: [Installation](docs/installation.md) and
 [Guided setup](docs/guided-setup.md).
+
+## How Hermes loads Chronalyn
+
+Chronalyn uses Hermes' public memory-provider contract. Nothing here relies on a
+private Hermes API, an invented entry-point group, or a modified Hermes core.
+
+```text
+$HERMES_HOME/plugins/chronalyn/            <- provider entry Hermes discovers
+$HERMES_HOME/plugins/hermes_memory_router/ <- compatibility alias (legacy id)
+```
+
+- Hermes discovers user-installed memory providers by scanning
+  `$HERMES_HOME/plugins/<provider-id>/`.
+- Each entry declares `kind: exclusive` in `plugin.yaml`, so Hermes' generic
+  plugin manager records the manifest without importing it and leaves activation
+  to the memory category.
+- Activation is a single supported config write: `memory.provider`.
+
+Details, including the exact discovery rules verified against a real Hermes
+installation, are in [Hermes integration](docs/hermes-integration.md).
 
 ## Commands
 
@@ -190,6 +177,49 @@ uses a two-step plan/apply flow with a short-lived confirmation token:
 
 Administrative retry, direct deletion, provider changes, configuration adoption,
 and rollback remain command-line operations.
+
+## Skills and Curator
+
+Chronalyn remembers what happened. Hermes Skills remember how to do it again.
+
+A checkpoint may record:
+
+```text
+Problem X occurred.
+Attempt A failed.
+Repair Y worked.
+Verification passed.
+```
+
+A Hermes Skill may encode the reusable procedure:
+
+```text
+Recover from Problem X
+1. Check prerequisite A.
+2. Confirm symptom B.
+3. Apply Y.
+4. Verify C.
+5. Stop if verification fails.
+```
+
+Chronalyn does not automatically create or rewrite Skills today. Hermes' own
+skill review and its Curator (an auxiliary-model task that periodically
+reviews, pins, archives, and consolidates agent-created skills) handle the
+Skills library independently.
+
+## What is not in Chronalyn 1.0
+
+These are future ideas, not current features:
+
+- automatically turning repeated successful memories into Hermes Skills;
+- automatically rewriting Skills from Chronalyn memory;
+- a deterministic self-healing/repair verifier;
+- unrestricted system repair;
+- automatic knowledge sharing between installations;
+- Chronalyn Console;
+- Chronalyn Intelligence.
+
+See [ROADMAP.md](ROADMAP.md) for the future direction.
 
 ## Generic projects, profiles, and environments
 
@@ -238,7 +268,7 @@ make check
 
 The suite uses local fake backends for routing and failure scenarios. It is not
 a substitute for testing a real Hermes, Hindsight, and Mnemosyne deployment.
-Complete [Live validation](docs/live-validation.md) before production use.
+See [Live validation](docs/live-validation.md) for the operator checklist.
 
 ## Documentation
 
@@ -248,7 +278,7 @@ Complete [Live validation](docs/live-validation.md) before production use.
 - [Upgrading](docs/upgrading.md)
 - [Rollback](docs/rollback.md)
 - [Uninstall and data retention](docs/uninstall-and-data-retention.md)
-- [RC limitations](docs/rc-limitations.md)
+- [Limitations](docs/limitations.md)
 - [Architecture](docs/architecture.md)
 - [Routing policies](docs/routing-policies.md)
 - [Hermes compatibility rules](docs/strict-compatibility.md)

@@ -28,7 +28,7 @@ Migration never:
 | CLI | `hermes-memory-router` | `chronalyn` |
 | Setup command | `setup-dual` | `setup` |
 | Hermes provider id | `hermes_memory_router` | `chronalyn` |
-| Version | `0.2.0b1` | `1.0.0rc1` |
+| Version | `0.2.0b1` | `1.0.0` |
 
 ## What deliberately does not change
 
@@ -57,7 +57,7 @@ Your existing database keeps working with no schema change and no reindex.
    distribution; the old import path keeps working through a shim.
 
    ```bash
-   python -m pip install --pre chronalyn
+   python -m pip install chronalyn
    ```
 
 3. **Review the plan without applying it:**

@@ -1,19 +1,33 @@
 # Live validation
 
-The local tests use fake backends. Complete this checklist on a staging host
-before production use.
+Chronalyn 1.0 has been validated against real backends in the categories below.
+The local test suite uses fake backends; this page records what real-environment
+validation covers and gives operators a repeatable checklist for their own
+deployments.
 
-Passing local tests alone does not prove production readiness. Automatic checks
-cannot prove live service compatibility, restore success, isolation under traffic,
-or capacity. Use a staging profile with separate credentials, banks, namespace,
+## What Chronalyn 1.0 is validated against
+
+- real Hermes provider integration (discovery, activation, tool exposure);
+- real native plugin lifecycle (install, update, remove with data retention);
+- live Hindsight behavior (retain, recall, reflect, health);
+- live Mnemosyne checkpoint behavior (retain, recall, embeddings);
+- Hindsight-first recall;
+- bounded Mnemosyne fallback;
+- restart and durability;
+- embedding migration / reindex safety (no vector-space mixing);
+- backup and rollback;
+- failure and retention behavior (outbox, retry, deletion).
+
+## Operator regression checklist
+
+Use a staging profile with separate credentials, banks, namespace,
 environment, database, and preferably a separate host.
 
 ## 1. Install and discover the plugin
 
 ```bash
-python -m pip install ./chronalyn-1.0.0rc1-py3-none-any.whl
-chronalyn install-plugin
-chronalyn setup
+hermes plugins install l1lchucky/chronalyn
+hermes memory setup
 hermes memory status
 ```
 

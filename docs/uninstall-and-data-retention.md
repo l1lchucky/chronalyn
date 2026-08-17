@@ -121,7 +121,7 @@ uninstalling Chronalyn does not revoke credentials.
 ## Reinstalling later
 
 ```bash
-python -m pip install --pre chronalyn
+python -m pip install chronalyn
 chronalyn install-plugin
 chronalyn validate
 chronalyn status

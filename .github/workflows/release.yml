@@ -23,11 +23,18 @@ jobs:
         run: |
           cp scripts/install-dual.sh dist/install-dual.sh
           chmod 0755 dist/install-dual.sh
+      - name: Derive artifact names from the release tag
+        shell: bash
+        run: |
+          # Artifact names derive from the actual release tag (e.g. v1.0.0,
+          # v1.1.0-rc.1) instead of a hard-coded version.
+          echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          echo "SBOM_FILE=dist/chronalyn-${GITHUB_REF_NAME}.spdx.json" >> "$GITHUB_ENV"
       - uses: anchore/sbom-action@v0
         with:
           path: .
           format: spdx-json
-          output-file: dist/chronalyn-v1.0.0-rc.1.spdx.json
+          output-file: ${{ env.SBOM_FILE }}
       - name: Generate SHA-256 release manifest
         shell: bash
         run: |
@@ -36,8 +43,8 @@ jobs:
             chronalyn-*.whl \
             chronalyn-*.tar.gz \
             install-dual.sh \
-            chronalyn-v1.0.0-rc.1.spdx.json \
-            > SHA256SUMS-chronalyn-v1.0.0-rc.1.txt
+            chronalyn-${TAG}.spdx.json \
+            > SHA256SUMS-chronalyn-${TAG}.txt
       - name: Generate build provenance
         uses: actions/attest@v4
         with:
@@ -50,4 +57,3 @@ jobs:
         with:
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: dist/*
-
