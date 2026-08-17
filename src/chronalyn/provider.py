@@ -314,6 +314,22 @@ class ChronalynMemoryProvider(MemoryProvider):
             environment=str(values.get("environment") or "development"),
         )
 
+    def post_setup(self, hermes_home: str, config: dict[str, Any]) -> None:
+        """Run the full Chronalyn architecture wizard inside ``hermes memory setup``.
+
+        Hermes' ``memory_setup`` delegates entirely to this hook when present
+        (instead of rendering the generic schema form), so the user gets the
+        real Chronalyn wizard and Chronalyn activates itself as the sole
+        external memory provider. One implementation is reused by both the
+        in-Hermes flow and the standalone ``chronalyn setup`` command.
+        """
+        from .setup_tui import run_dual_setup
+
+        run_dual_setup(
+            hermes_home=Path(hermes_home).expanduser(),
+            launched_from_hermes=True,
+        )
+
 
 #: Deprecated alias kept so existing source imports keep working. Chronalyn was
 #: previously published as Hermes Memory Router; the class was renamed with the
