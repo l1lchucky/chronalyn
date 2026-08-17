@@ -1,8 +1,8 @@
 """Single source of truth for Chronalyn identity and compatibility aliases.
 
-Chronalyn is a persistent engineering-intelligence layer for AI agents and
-software teams. The v1.0.0 release candidate implements reliable memory
-orchestration for Hermes Agent only; console, change-intelligence, bug-discovery
+Chronalyn is long-term memory orchestration for Hermes Agent: Hindsight
+provides deeper history and semantic recall, Mnemosyne keeps verified
+checkpoints with bounded fallback. Console, change-intelligence, bug-discovery
 and deployment-analysis modules are roadmap items and are not implemented here.
 
 Durable identities are deliberately separated from brand identities:
@@ -14,22 +14,22 @@ Durable identities are deliberately separated from brand identities:
   value, but they are accepted, detected, backed up, and reported.
 * ``STATE_DIRNAME`` is a *durable* on-disk identity. It is intentionally NOT
   rebranded: renaming it would strand existing configuration, databases and
-  backups, which the RC must not do.
+  backups.
 """
 
 from __future__ import annotations
 
 # -- Brand ------------------------------------------------------------------
 BRAND = "Chronalyn"
-TAGLINE = "Persistent engineering-intelligence layer for AI agents and software teams"
-HERMES_COMPONENT = "Chronalyn for Hermes"
+TAGLINE = "Give Hermes a past it can actually use."
+HERMES_COMPONENT = "Chronalyn"
 
 # -- Versions ---------------------------------------------------------------
 # Python/PEP 440 version and the human release name must stay in lockstep.
-VERSION = "1.0.0rc1"
-RELEASE_NAME = "v1.0.0-rc.1"
+VERSION = "1.0.0"
+RELEASE_NAME = "v1.0.0"
 RELEASE_TAG = RELEASE_NAME
-IS_RELEASE_CANDIDATE = True
+IS_RELEASE_CANDIDATE = False
 
 # -- Distribution and CLI ---------------------------------------------------
 DISTRIBUTION = "chronalyn"
@@ -57,7 +57,7 @@ STATE_DB_FILENAME = "router.db"
 CONFIG_FILENAME = "config.json"
 
 # -- Release artifacts ------------------------------------------------------
-REPOSITORY = "l1lchucky/hermes-memory-router"
+REPOSITORY = "l1lchucky/chronalyn"
 WHEEL = f"{PACKAGE}-{VERSION}-py3-none-any.whl"
 SDIST = f"{PACKAGE}-{VERSION}.tar.gz"
 SBOM = f"{DISTRIBUTION}-{RELEASE_NAME}.spdx.json"

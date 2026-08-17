@@ -1,5 +1,10 @@
 # Chronalyn rename migration matrix
 
+> **Historical note (2026-08-17):** the repository rename described below as
+> "future" has since been completed: `l1lchucky/hermes-memory-router` is now
+> `l1lchucky/chronalyn` (same repository, redirects preserved). This matrix is
+> retained as the historical record of the brand/compatibility migration.
+
 This matrix was created from the clean `rename-and-prepare-rc` baseline at
 `7587737f623c6d05cf84ac077eec2d40e762654e` before implementation changes.
 It distinguishes public identity from durable compatibility identities; it is

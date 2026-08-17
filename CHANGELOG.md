@@ -2,25 +2,42 @@
 
 The project follows Semantic Versioning and the Keep a Changelog format.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-17
+
+First stable release.
 
 ### Added
 
 - **Native Hermes plugin installation.** Chronalyn can be installed from inside
-  Hermes with `hermes plugins install l1lchucky/hermes-memory-router`, then
+  Hermes with `hermes plugins install l1lchucky/chronalyn`, then
   selected in `hermes memory setup`. The Chronalyn wizard runs inside the Hermes
   flow via the provider's `post_setup` hook — no separate CLI step is required.
-- **Hindsight embedding-backend guidance** in the configuration docs:
-  embedding providers are interchangeable as long as the target vector index is
-  rebuilt (equal dimensions do not imply compatible vector spaces).
+- **Hindsight-only mode** — Hindsight handles every memory operation; Mnemosyne
+  is neither installed nor configured.
+- **Dual memory mode** — Hindsight for normal memory; Mnemosyne for verified
+  checkpoints and bounded fallback.
+- **Provider-neutral embedding configuration** — an OpenAI-compatible embedding
+  backend can be configured for Mnemosyne semantic recall; Mnemosyne's LLM is
+  disabled by default.
+- **Hindsight embedding-backend guidance** — embedding providers are
+  interchangeable as long as the target vector index is rebuilt (equal
+  dimensions do not imply compatible vector spaces).
 - **Hindsight 0.9 metadata compatibility** — outbound Hindsight metadata is
   normalized to `dict[str, str]` deterministically, without mutating caller
   metadata.
+- **Verified Mnemosyne checkpoints** with durable delivery, retry, and safe
+  deletion.
+- **Backup and rollback** for configuration and the control database.
+- **Native Hermes coexistence** — three complementary memory layers: Hermes
+  native memory, Chronalyn (Hindsight + Mnemosyne), and Skills.
 
 ### Changed
 
-- README recommended installation path is now the Hermes-native flow; the
+- README recommended installation path is the Hermes-native flow; the
   Python package path (`pip install chronalyn`) remains supported.
+- Public repository renamed to `l1lchucky/chronalyn`.
+- Release artifacts (wheel, sdist, SBOM, checksums) are named from the release
+  tag instead of a hard-coded version.
 
 ## [1.0.0-rc.1] - 2026-08-04
 

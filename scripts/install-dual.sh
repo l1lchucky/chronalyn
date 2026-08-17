@@ -2,10 +2,10 @@
 set -euo pipefail
 umask 077
 
-VERSION="1.0.0-rc.1"
-PY_VERSION="1.0.0rc1"
+VERSION="1.0.0"
+PY_VERSION="1.0.0"
 TAG="v${VERSION}"
-REPO="l1lchucky/hermes-memory-router"
+REPO="l1lchucky/chronalyn"
 WHEEL="chronalyn-${PY_VERSION}-py3-none-any.whl"
 RELEASE_BASE="https://github.com/${REPO}/releases/download/${TAG}"
 CHECKSUMS="SHA256SUMS-chronalyn-${TAG}.txt"

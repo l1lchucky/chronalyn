@@ -1,7 +1,7 @@
 import tomllib
 from pathlib import Path
 
-REPOSITORY_ROOT = "https://github.com/l1lchucky/hermes-memory-router"
+REPOSITORY_ROOT = "https://github.com/l1lchucky/chronalyn"
 
 
 def _project_metadata() -> dict[str, object]:
@@ -14,7 +14,8 @@ def test_project_metadata_is_searchable_and_truthful() -> None:
     keywords = set(project["keywords"])
 
     assert project["name"] == "chronalyn"
-    assert "AI agent memory" in project["description"]
+    assert "memory" in project["description"].lower()
+    assert "Hermes" in project["description"]
     assert {
         "chronalyn",
         "hermes-agent",
@@ -32,13 +33,16 @@ def test_project_urls_use_the_current_repository_path() -> None:
 
     assert urls
     assert all(str(url).startswith(REPOSITORY_ROOT) for url in urls.values())
-    assert not any("github.com/l1lchucky/chronalyn" in str(url) for url in urls.values())
+    # The canonical repository is chronalyn; the old slug must not appear.
+    assert all("hermes-memory-router" not in str(url) for url in urls.values())
 
 
 def test_readme_opening_names_the_implemented_memory_components() -> None:
-    opening = "\n".join(Path("README.md").read_text(encoding="utf-8").splitlines()[:35])
+    readme = Path("README.md").read_text(encoding="utf-8")
+    opening = "\n".join(readme.splitlines()[:35])
 
     assert "Hermes Agent" in opening
     assert "Hindsight" in opening
     assert "Mnemosyne" in opening
-    assert "not implemented" in opening
+    # The README must separate current features from future ideas.
+    assert "What is not in Chronalyn 1.0" in readme

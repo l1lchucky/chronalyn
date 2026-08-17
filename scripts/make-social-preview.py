@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """Generate the Chronalyn social preview image (1280x640).
 
-Dark, minimal, provider-neutral: brand name, tagline, and the
-Hermes -> Chronalyn -> Hindsight + Mnemosyne architecture.
+Dark, minimal, provider-neutral: brand name, tagline, and a small
+Hindsight + Mnemosyne note. Regeneration requires Pillow:
+
+    python -m pip install pillow
+    python scripts/make-social-preview.py
+
+Pillow is a development-time dependency only; it is not a Chronalyn runtime
+dependency.
 """
 
 from pathlib import Path
@@ -44,7 +50,8 @@ f_tag = font(22, bold=True)
 
 # Title block
 d.text((64, 56), "Chronalyn", font=f_title, fill=TEXT)
-d.text((64, 150), "Memory orchestration for Hermes Agent", font=f_sub, fill=MUTED)
+d.text((64, 150), "Give Hermes a past it can actually use.", font=f_sub, fill=MUTED)
+d.text((64, 195), "Hindsight + Mnemosyne", font=f_tag, fill=GREEN)
 
 # Architecture: three panels (generous margins, arrows clear of text)
 panels = [
@@ -92,7 +99,7 @@ d.text(
 )
 d.text(
     (64, 570),
-    "hermes plugins install l1lchucky/hermes-memory-router",
+    "hermes plugins install l1lchucky/chronalyn",
     font=f_small,
     fill=BLUE,
 )

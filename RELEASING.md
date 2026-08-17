@@ -32,11 +32,12 @@
    Then mirror it in the files that cannot import it:
 
    - `pyproject.toml`
-   - `plugin.yaml` — the root manifest is retained for this RC as a public
-     plugin release input; its name and version must match canonical identity
+   - `plugin.yaml` — the root manifest is retained as a public plugin release
+     input; its name and version must match canonical identity
    - `CITATION.cff`
    - `scripts/install-dual.sh` (`VERSION`, `PY_VERSION`)
-   - `.github/workflows/release.yml` (SBOM and checksum file names)
+   - `.github/workflows/release.yml` derives SBOM and checksum names from the
+     release tag automatically; verify the names for the tag being released
 
    `tests/test_install_dual_script.py` asserts the installer and workflow names,
    while `tests/test_plugin_entry.py` asserts the root manifest public identity,
@@ -46,8 +47,8 @@
 7. Create and push a signed tag:
 
    ```bash
-   git tag -s v1.0.0-rc.1 -m "Chronalyn v1.0.0-rc.1"
-   git push origin v1.0.0-rc.1
+   git tag -s v1.0.0 -m "Chronalyn v1.0.0"
+   git push origin v1.0.0
    ```
 
 ## GitHub settings
@@ -65,6 +66,6 @@ Before making the repository public:
 
 ## PyPI
 
-Keep the release candidate on GitHub Releases until the live staging checklist
-passes. When PyPI publishing is enabled, use GitHub Trusted Publishing instead
-of a long-lived PyPI token.
+Publish stable releases to PyPI when the release channel is ready. Use GitHub
+Trusted Publishing instead of a long-lived PyPI token. Until PyPI publishing
+is configured, GitHub Releases is the available release channel.

@@ -1,11 +1,11 @@
-"""Chronalyn — a persistent engineering-intelligence layer for AI agents.
+"""Chronalyn — long-term memory orchestration for Hermes Agent.
 
-The v1.0.0 release candidate implements reliable memory orchestration for
-Hermes Agent: Hindsight is the automatic memory authority, Mnemosyne stores
-verified checkpoints and acts only as a bounded fallback.
+Hindsight provides deeper history and semantic recall; Mnemosyne keeps
+verified checkpoints and acts only as a bounded fallback. Hermes' native
+memory (MEMORY.md / USER.md) and Skills remain independent layers.
 
 Console, change-intelligence, bug-discovery and deployment-analysis modules are
-roadmap items and are not implemented in this release candidate.
+roadmap items and are not implemented.
 """
 
 from .config import RouterConfig, load_config

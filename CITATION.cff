@@ -2,17 +2,16 @@ cff-version: 1.2.0
 message: "If you use Chronalyn, cite this software."
 title: "Chronalyn"
 abstract: >-
-  Chronalyn is a persistent engineering-intelligence layer for AI agents and
-  software teams. The v1.0.0 release candidate implements reliable memory
-  orchestration for Hermes Agent: Hindsight is the automatic memory authority
-  and Mnemosyne stores verified checkpoints as a bounded fallback.
+  Chronalyn is long-term memory orchestration for Hermes Agent. Hindsight
+  provides deeper history and semantic recall; Mnemosyne keeps verified
+  checkpoints with bounded fallback.
 type: software
-version: "1.0.0-rc.1"
-date-released: "2026-08-04"
+version: "1.0.0"
+date-released: "2026-08-17"
 authors:
   - family-names: "Chucky"
     alias: "l1lchucky"
-repository-code: "https://github.com/l1lchucky/hermes-memory-router"
+repository-code: "https://github.com/l1lchucky/chronalyn"
 license: MIT
 keywords:
   - chronalyn
