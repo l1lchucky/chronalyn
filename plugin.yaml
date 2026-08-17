@@ -1,6 +1,8 @@
 name: chronalyn
 version: 1.0.0-rc.1
-description: Chronalyn — Hindsight-first memory orchestration with verified Mnemosyne checkpoints.
+description: Chronalyn — memory orchestration for Hermes using Hindsight with optional Mnemosyne verified checkpoints.
 kind: exclusive
+author: Chucky
+url: https://github.com/l1lchucky/hermes-memory-router
 pip_dependencies: []
 requires_env: []
