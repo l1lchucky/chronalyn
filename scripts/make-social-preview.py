@@ -1,108 +1,197 @@
 #!/usr/bin/env python3
-"""Generate the Chronalyn social preview image (1280x640).
+"""Chronalyn brand asset generator.
 
-Dark, minimal, provider-neutral: brand name, tagline, and a small
-Hindsight + Mnemosyne note. Regeneration requires Pillow:
+Builds the three public brand assets deterministically from shared vector
+geometry (the "open arc" mark), so the images are crisp at any size, have
+correct spelling, and never contain AI artifacts:
+
+    docs/assets/chronalyn-icon.png               square mark, transparent
+    docs/assets/chronalyn-logo.png               [mark] Chronalyn wordmark, transparent
+    docs/assets/chronalyn-social-preview.png     1280x640 brand card, navy
+
+Regeneration requires Pillow (development-only dependency, not a runtime
+dependency of Chronalyn):
 
     python -m pip install pillow
     python scripts/make-social-preview.py
 
-Pillow is a development-time dependency only; it is not a Chronalyn runtime
-dependency.
+The mark is an open arc: a circle with a deliberate gap that reads as the
+letter C and as continuity / history. It is intentionally not a spinner,
+clock, or sync icon.
 """
 
+from __future__ import annotations
+
+import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-W, H = 1280, 640
-BG = (15, 17, 26)  # near-black navy
-PANEL = (24, 28, 42)  # card background
-ACCENT = (99, 102, 241)  # indigo
-TEXT = (226, 230, 240)  # near-white
-MUTED = (148, 156, 178)  # gray-blue
-GREEN = (52, 211, 153)  # mnemosyne accent
-BLUE = (96, 165, 250)  # hindsight accent
+ASSETS = Path(__file__).resolve().parent.parent / "docs" / "assets"
 
-OUT = Path(__file__).resolve().parent.parent / "docs" / "assets" / "chronalyn-social-preview.png"
+# Palette (restrained: navy ink, off-white, one teal accent).
+NAVY = (14, 20, 32)        # #0E1420
+OFF_WHITE = (242, 244, 248)  # #F2F4F8
+MUTED = (154, 163, 178)      # #9AA3B2
+TEAL = (45, 212, 191)        # #2DD4BF
 
-img = Image.new("RGB", (W, H), BG)
-d = ImageDraw.Draw(img)
+FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+FONT_REG = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+FONT_DEJAVU_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
-def font(size, bold=False):
-    try:
-        return ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-            if bold
-            else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            size,
-        )
-    except Exception:
-        return ImageFont.load_default()
+def font(path: str, size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(path, size)
 
 
-f_title = font(72, bold=True)
-f_sub = font(30)
-f_node = font(26, bold=True)
-f_small = font(20)
-f_tag = font(22, bold=True)
+def draw_open_arc(
+    d: ImageDraw.ImageDraw,
+    center: tuple[float, float],
+    radius: float,
+    color: tuple[int, int, int],
+    width: float,
+    gap_deg: float = 42.0,
+    rotation_deg: float = 0.0,
+    cap: str = "round",
+) -> None:
+    """Draw an open arc (a C-like ring) as a filled annular wedge.
 
-# Title block
-d.text((64, 56), "Chronalyn", font=f_title, fill=TEXT)
-d.text((64, 150), "Give Hermes a past it can actually use.", font=f_sub, fill=MUTED)
-d.text((64, 195), "Hindsight + Mnemosyne", font=f_tag, fill=GREEN)
-
-# Architecture: three panels (generous margins, arrows clear of text)
-panels = [
-    (80, 260, 300, 360, "Hermes Agent", "memory provider contract", ACCENT),
-    (440, 260, 656, 360, "Chronalyn", "orchestration layer", TEXT),
-    (796, 260, 1200, 360, "Hindsight + Mnemosyne", "persistent memory + checkpoints", GREEN),
-]
-for x0, y0, x1, y1, title, sub, color in panels:
-    d.rounded_rectangle([x0, y0, x1, y1], radius=16, fill=PANEL, outline=color, width=2)
-    d.text((x0 + 24, y0 + 30), title, font=f_node, fill=color)
-    d.text((x0 + 24, y0 + 76), sub, font=f_small, fill=MUTED)
-
-
-# Arrows
-def arrow(x0, y0, x1, y1):
-    d.line([x0, y0, x1, y1], fill=MUTED, width=4)
-    # arrowhead
-    import math
-
-    ang = math.atan2(y1 - y0, x1 - x0)
-    for da in (0.4, -0.4):
-        d.line(
-            [x1, y1, x1 - 22 * math.cos(ang - da), y1 - 22 * math.sin(ang - da)],
-            fill=MUTED,
-            width=4,
-        )
+    Rendering as a polygon (outer radius minus inner radius) gives one smooth
+    continuous stroke with no polyline segment seams. gap_deg is the angular
+    size of the missing segment; rotation_deg places the gap.
+    """
+    start = rotation_deg + gap_deg / 2
+    end = rotation_deg + 360 - gap_deg / 2
+    inner = radius - width / 2
+    outer = radius + width / 2
+    steps = 128
+    pts: list[tuple[float, float]] = []
+    for i in range(steps + 1):
+        ang = math.radians(start + (end - start) * i / steps)
+        pts.append((center[0] + outer * math.cos(ang), center[1] + outer * math.sin(ang)))
+    for i in range(steps, -1, -1):
+        ang = math.radians(start + (end - start) * i / steps)
+        pts.append((center[0] + inner * math.cos(ang), center[1] + inner * math.sin(ang)))
+    d.polygon(pts, fill=color)
+    # Round caps at both ends.
+    for a in (start, end):
+        x = center[0] + radius * math.cos(math.radians(a))
+        y = center[1] + radius * math.sin(math.radians(a))
+        d.ellipse([x - width / 2, y - width / 2, x + width / 2, y + width / 2], fill=color)
 
 
-arrow(300, 310, 440, 310)
-arrow(656, 310, 796, 310)
+# --------------------------------------------------------------------------
+# Icon: square, transparent, centered open-arc mark with generous padding.
+# --------------------------------------------------------------------------
+def make_icon(size: int = 512) -> Image.Image:
+    pad = size * 0.22
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    cx = cy = size / 2
+    radius = (size / 2) - pad
+    stroke = size * 0.09
+    draw_open_arc(d, (cx, cy), radius, TEAL, stroke)
+    return img
 
-# Footer: one provider
-d.text((64, 440), "Hermes sees one memory provider.", font=f_tag, fill=TEXT)
-d.text(
-    (64, 486),
-    "Hindsight handles persistent memory, recall, and reflection;",
-    font=f_small,
-    fill=MUTED,
-)
-d.text(
-    (64, 516),
-    "Mnemosyne keeps verified checkpoints and bounded fallback.",
-    font=f_small,
-    fill=MUTED,
-)
-d.text(
-    (64, 570),
-    "hermes plugins install l1lchucky/chronalyn",
-    font=f_small,
-    fill=BLUE,
-)
 
-img.save(OUT)
-print(f"saved {OUT}")
+# --------------------------------------------------------------------------
+# Logo: horizontal wordmark [mark] Chronalyn on transparent.
+# --------------------------------------------------------------------------
+def make_logo(mark_px: int = 220) -> Image.Image:
+    text = "Chronalyn"
+    f = font(FONT_BOLD, 128)
+    bbox = f.getbbox(text)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    gap = 34
+    pad = 24
+    W = pad * 2 + mark_px + gap + tw
+    H = pad * 2 + max(mark_px, th)
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    # Mark centered vertically, slightly optically corrected.
+    mark_center_y = H / 2 + mark_px * 0.02
+    radius = mark_px * 0.42
+    stroke = mark_px * 0.10
+    draw_open_arc(d, (pad + mark_px / 2, mark_center_y), radius, TEAL, stroke)
+    # Wordmark, vertically centered on cap height.
+    ty = (H - th) / 2 - bbox[1]
+    d.text((pad + mark_px + gap, ty), text, font=f, fill=NAVY)
+    return img
+
+
+# --------------------------------------------------------------------------
+# Social preview: 1280x640 brand card. Brand-first, no architecture.
+# --------------------------------------------------------------------------
+def make_social_preview() -> Image.Image:
+    # Render at 2x and downscale for crisp text edges.
+    SCALE = 2
+    W, H = 1280 * SCALE, 640 * SCALE
+    img = Image.new("RGB", (W, H), NAVY)
+    d = ImageDraw.Draw(img)
+
+    # Very subtle top-right ambient glow (single soft radial, restrained).
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    gx, gy, gr = W - 480, 240, 840
+    for i in range(gr, 0, -12):
+        a = int(10 * (1 - i / gr))
+        od.ellipse([gx - i, gy - i, gx + i, gy + i], fill=(45, 212, 191, a))
+    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+    d = ImageDraw.Draw(img)
+
+    # Mark: large open arc centered above the wordmark.
+    mark_r = 184
+    mark_cx, mark_cy = W / 2, 436
+    draw_open_arc(d, (mark_cx, mark_cy), mark_r, TEAL, 52)
+
+    # Wordmark.
+    f_word = font(FONT_BOLD, 192)
+    bbox = f_word.getbbox("Chronalyn")
+    d.text(
+        ((W - (bbox[2] - bbox[0])) / 2 - bbox[0], 704),
+        "Chronalyn",
+        font=f_word,
+        fill=OFF_WHITE,
+    )
+
+    # Tagline.
+    f_tag = font(FONT_DEJAVU_BOLD, 68)
+    tag = "Give Hermes a past it can actually use."
+    tb = f_tag.getbbox(tag)
+    d.text(
+        ((W - (tb[2] - tb[0])) / 2 - tb[0], 956),
+        tag,
+        font=f_tag,
+        fill=MUTED,
+    )
+
+    # Supporting line.
+    f_sub = font(FONT_REG, 48)
+    sub = "Long-term memory for Hermes Agent"
+    sb = f_sub.getbbox(sub)
+    d.text(
+        ((W - (sb[2] - sb[0])) / 2 - sb[0], 1092),
+        sub,
+        font=f_sub,
+        fill=MUTED,
+    )
+    return img.resize((1280, 640), Image.LANCZOS)
+
+
+def main() -> None:
+    ASSETS.mkdir(parents=True, exist_ok=True)
+    icon = make_icon(512)
+    icon.save(ASSETS / "chronalyn-icon.png")
+    logo = make_logo()
+    logo.save(ASSETS / "chronalyn-logo.png")
+    social = make_social_preview()
+    social.save(ASSETS / "chronalyn-social-preview.png")
+    print("saved:")
+    print("  docs/assets/chronalyn-icon.png")
+    print("  docs/assets/chronalyn-logo.png")
+    print("  docs/assets/chronalyn-social-preview.png")
+
+
+if __name__ == "__main__":
+    main()
