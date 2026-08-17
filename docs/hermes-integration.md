@@ -87,8 +87,17 @@ There are two equivalent entry points into the same wizard:
   `hermes memory setup` detects the provider's `post_setup(hermes_home, config)`
   hook and delegates the whole wizard to it, so the user never leaves the Hermes
   flow. Chronalyn's `post_setup` calls the same `run_dual_setup()` engine the
-  standalone CLI uses, with `launched_from_hermes=True` so its completion screen
-  points at `hermes memory status` rather than the standalone CLI.
+  standalone CLI uses, with a **setup origin** of `HERMES_PLUGIN` so the wizard
+  treats Chronalyn as already installed by Hermes:
+
+  - no Chronalyn package/wheel reinstall;
+  - no provider-entry creation (the Hermes-managed Git clone is the entry);
+  - no replacement of `$HERMES_HOME/plugins/chronalyn`;
+  - configuration backup, backend/embedding setup, and
+    `memory.provider=chronalyn` activation still run.
+
+  The standalone flow uses `SetupOrigin.STANDALONE` and may still install
+  provider entries where required.
 
 - **Standalone flow (manual / developer):**
 

@@ -37,13 +37,149 @@ from .compatibility import (
 )
 from .config import new_config, write_config
 from .exceptions import ConfigurationError
-from .policy import HINDSIGHT_MNEMOSYNE
+from .policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
+
+MNEMOSYNE_PACKAGE = "mnemosyne-memory"
+MNEMOSYNE_MIN_VERSION = "3.15"
+
+
+def _ensure_mnemosyne_dependency(runtime: HermesRuntime, *, log: Callable[[str], None]) -> None:
+    """Install mnemosyne-memory only if missing, into Hermes' own Python.
+
+    Uses the Hermes runtime interpreter and a safe argv-based pip invocation
+    (never shell=True, never interpolated shell text). Import-tests the
+    package and verifies the minimum supported version afterwards.
+    """
+    import subprocess
+
+    probe = subprocess.run(
+        [
+            runtime.python,
+            "-c",
+            "import importlib.util, sys; print(bool(importlib.util.find_spec('mnemosyne')))",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    present = probe.returncode == 0 and probe.stdout.strip() == "True"
+    if present:
+        ver = subprocess.run(
+            [
+                runtime.python,
+                "-c",
+                "import importlib.metadata; print(importlib.metadata.version('mnemosyne-memory'))",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        installed = ver.stdout.strip() if ver.returncode == 0 else ""
+        if installed and not _version_ge(installed, MNEMOSYNE_MIN_VERSION):
+            raise ConfigurationError(
+                f"Installed mnemosyne-memory {installed} is older than the supported "
+                f">={MNEMOSYNE_MIN_VERSION}; refusing to activate dual mode."
+            )
+        log(f"mnemosyne-memory {installed or 'present'} already installed")
+        return
+    log(f"Installing {MNEMOSYNE_PACKAGE}>={MNEMOSYNE_MIN_VERSION} into Hermes' Python")
+    subprocess.run(
+        [runtime.python, "-m", "pip", "install", f"{MNEMOSYNE_PACKAGE}>={MNEMOSYNE_MIN_VERSION}"],
+        check=True,
+        timeout=600,
+    )
+    verify = subprocess.run(
+        [
+            runtime.python,
+            "-c",
+            "import mnemosyne; print(mnemosyne.__version__ if hasattr(mnemosyne, '__version__') else 'import-ok')",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if verify.returncode != 0:
+        raise ConfigurationError(
+            "mnemosyne-memory installed but failed to import in Hermes' runtime: "
+            + verify.stderr.strip()[:300]
+        )
+    log("mnemosyne-memory import-tested in Hermes' Python")
+
+
+def _version_ge(installed: str, minimum: str) -> bool:
+    def parts(v: str) -> list[int]:
+        out: list[int] = []
+        for chunk in v.replace("-", ".").split("."):
+            if chunk.isdigit():
+                out.append(int(chunk))
+            else:
+                break
+        return out or [0]
+
+    return parts(installed) >= parts(minimum)
+
+
+def _write_embedding_env(
+    hermes_home: Path,
+    *,
+    api_url: str,
+    model: str,
+    dimensions: int,
+    batch_size: int,
+    key_env: str,
+    log: Callable[[str], None],
+) -> None:
+    """Write provider-neutral embedding configuration into the secret env.
+
+    The key VALUE is never stored in normal config, logs, or status output:
+    only the environment-variable NAME is recorded. If a key value is already
+    present in the Hermes secret env, it is left untouched.
+    """
+    env_writes = {
+        "HINDSIGHT_API_EMBEDDINGS_PROVIDER": "openai",
+        "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": api_url,
+        "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": model,
+        "HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS": str(dimensions),
+        "HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE": str(batch_size),
+        "MNEMOSYNE_EMBEDDING_MODEL": model,
+        "MNEMOSYNE_EMBEDDING_DIM": str(dimensions),
+        "MNEMOSYNE_EMBEDDING_API_URL": api_url,
+        "MNEMOSYNE_EMBEDDINGS_VIA_API": "true",
+        "MNEMOSYNE_EMBEDDING_QUERY_PREFIX": "query: ",
+        "MNEMOSYNE_EMBEDDING_DOC_PREFIX": "passage: ",
+    }
+    if key_env:
+        env_writes["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = "${" + key_env + "}"
+        env_writes["MNEMOSYNE_EMBEDDING_API_KEY"] = "${" + key_env + "}"
+    write_secret_env(hermes_home, env_writes)
+    log("Wrote provider-neutral embedding configuration to the secret env")
+
 
 # Screen banner. Distinct from identity.BRAND, which is the product name.
 BRAND = "CHRONALYN"
-SUBTITLE = "STRICT HINDSIGHT + MNEMOSYNE SETUP"
+SUBTITLE = "MEMORY ORCHESTRATION FOR HERMES"
 MIN_WIDTH = 72
 MIN_HEIGHT = 22
+
+
+class SetupOrigin:
+    """Where this setup run was launched from.
+
+    HERMES_PLUGIN: the Chronalyn plugin was already installed by
+    ``hermes plugins install``. Chronalyn must treat itself as installed:
+    never reinstall the package/wheel, never create a provider shim, never
+    replace the Hermes-managed Git clone.
+
+    STANDALONE: launched via ``chronalyn setup`` after ``pip install``. The
+    standalone installer may install provider entries where required.
+    """
+
+    HERMES_PLUGIN = "hermes_plugin"
+    STANDALONE = "standalone"
+
+
+ARCH_DUAL = "dual"
+ARCH_HINDSIGHT_ONLY = "hindsight_only"
 
 PACMAN_FRAMES = (
     "C  * * * *",
@@ -82,6 +218,14 @@ class DualSetupState:
     backup_path: Path | None = None
     status: dict[str, object] = field(default_factory=dict)
     launched_from_hermes: bool = False
+    origin: str = SetupOrigin.STANDALONE
+    architecture: str = ARCH_DUAL
+    embedding_api_url: str = ""
+    embedding_model: str = ""
+    embedding_dimensions: int = 0
+    embedding_api_key_env: str = ""
+    embedding_batch_size: int = 0
+    mnemosyne_install_requested: bool = True
 
 
 @dataclass(frozen=True)
@@ -362,7 +506,7 @@ class DualSetupApp:
         items = acknowledgement_items(self.state)
         selected = 0
         while True:
-            height, width = self._draw_chrome("5 / 7  TRUST & PRIVACY")
+            height, width = self._draw_chrome("6 / 8  TRUST & PRIVACY")
             y = self._draw_title(
                 4,
                 "Review the strict policy",
@@ -624,7 +768,9 @@ class DualSetupApp:
             self._welcome()
             self._scan_and_ensure_hermes()
             self._identity()
+            self._architecture()
             self._hindsight()
+            self._embeddings()
             if not self._acknowledgements():
                 self._hindsight()
                 if not self._acknowledgements():
@@ -640,9 +786,14 @@ class DualSetupApp:
 
     def _welcome(self) -> None:
         lines = [
-            "One Hermes memory provider. Two deliberately different roles.",
+            "One Hermes memory provider. One or two deliberate memory roles.",
             "",
-            *explain_dual_mode(),
+            "Dual memory:",
+            "  Hindsight  -> automatic memory / recall / reflection",
+            "  Mnemosyne  -> verified checkpoints / bounded fallback",
+            "",
+            "Hindsight-only:",
+            "  Hindsight handles every memory operation.",
             "",
             "The router never activates itself merely because a package exists. It does not "
             "copy old Hindsight memories, merge both recall sets, patch Hermes, or expose both "
@@ -651,7 +802,7 @@ class DualSetupApp:
             "This interface is monochrome and dependency-free. Mouse support is enabled where "
             "the terminal exposes it; number keys, arrows, SPACE, and ENTER always work.",
         ]
-        self._show_info("1 / 7  INTRO", "Understand dual mode", lines, allow_back=False)
+        self._show_info("1 / 8  INTRO", "Welcome to Chronalyn", lines, allow_back=False)
 
     def _scan_and_ensure_hermes(self) -> None:
         self.state.discovery = discover(self.state.hermes_home)
@@ -663,11 +814,16 @@ class DualSetupApp:
                 f"Python:  {self.state.runtime.python}",
                 "The installer will not reinstall or replace Hermes.",
             ]
-            self._show_info("2 / 7  SYSTEM", "Hermes detected", lines, allow_back=False)
+            if self.state.origin == SetupOrigin.HERMES_PLUGIN:
+                lines.append(
+                    "Chronalyn is installed as a Hermes-managed plugin; this setup will "
+                    "not reinstall it or replace its plugin directory."
+                )
+            self._show_info("2 / 8  SYSTEM", "Hermes detected", lines, allow_back=False)
             return
 
         choice = self._menu(
-            "2 / 7  SYSTEM",
+            "2 / 8  SYSTEM",
             "Hermes is not installed",
             "The router can install Hermes through Nous Research's official HTTPS "
             "installer. The default skips Playwright and Chromium to keep the first "
@@ -709,11 +865,11 @@ class DualSetupApp:
             log(f"SHA-256: {receipt.sha256}")
             log(f"Bytes: {receipt.bytes}")
 
-        self._run_task("2 / 7  SYSTEM", "Download official Hermes installer", download_task)
+        self._run_task("2 / 8  SYSTEM", "Download official Hermes installer", download_task)
         receipt = self.state.installer_receipt
         assert receipt is not None
         approved = self._show_info(
-            "2 / 7  SYSTEM",
+            "2 / 8  SYSTEM",
             "Approve the official Hermes installer",
             (
                 f"Source:  {receipt.url}",
@@ -742,12 +898,12 @@ class DualSetupApp:
             )
             log("Hermes runtime located successfully")
 
-        self._run_task("2 / 7  SYSTEM", "Install Hermes Agent", install_task)
+        self._run_task("2 / 8  SYSTEM", "Install Hermes Agent", install_task)
 
     def _identity(self) -> None:
         while True:
             namespace = self._text_input(
-                "3 / 7  IDENTITY",
+                "3 / 8  IDENTITY",
                 "Project namespace",
                 "A stable project boundary used in the router database and both bank names.",
                 self.state.namespace,
@@ -757,7 +913,7 @@ class DualSetupApp:
                 continue
             self.state.namespace = namespace
             environment = self._text_input(
-                "3 / 7  IDENTITY",
+                "3 / 8  IDENTITY",
                 "Environment",
                 "Use a physical deployment boundary such as staging or production.",
                 self.state.environment,
@@ -793,7 +949,7 @@ class DualSetupApp:
         ]
         default = 0 if detected else 1
         choice = self._menu(
-            "4 / 7  HINDSIGHT",
+            "5 / 8  HINDSIGHT",
             "Choose the Hindsight authority",
             "Hindsight is always the only automatic retention, recall, and reflection backend. "
             "Mnemosyne remains a verified-checkpoint ledger.",
@@ -814,7 +970,7 @@ class DualSetupApp:
         if choice == 1:
             self.state.hindsight_mode = "local_external"
             url = self._text_input(
-                "4 / 7  HINDSIGHT",
+                "5 / 8  HINDSIGHT",
                 "Self-hosted Hindsight API",
                 "Enter the external API URL. The router does not manage the "
                 "embedded Hindsight process.",
@@ -825,7 +981,7 @@ class DualSetupApp:
                 return self._hindsight()
             self.state.hindsight_api_url = url
             key = self._text_input(
-                "4 / 7  HINDSIGHT",
+                "5 / 8  HINDSIGHT",
                 "Self-hosted API key (optional)",
                 "Leave blank when the API has no authentication. A supplied key is masked "
                 "and stored only in $HERMES_HOME/.env with owner-only permissions.",
@@ -838,7 +994,7 @@ class DualSetupApp:
         else:
             self.state.hindsight_mode = "cloud"
             url = self._text_input(
-                "4 / 7  HINDSIGHT",
+                "5 / 8  HINDSIGHT",
                 "Hindsight Cloud API",
                 "Confirm the HTTPS endpoint. Cloud activation requires explicit acknowledgement.",
                 "https://api.hindsight.vectorize.io",
@@ -848,7 +1004,7 @@ class DualSetupApp:
                 return self._hindsight()
             self.state.hindsight_api_url = url
             key = self._text_input(
-                "4 / 7  HINDSIGHT",
+                "5 / 8  HINDSIGHT",
                 "Hindsight API key",
                 "The key is masked and written only to $HERMES_HOME/.env with owner-only permissions.",
                 "",
@@ -861,7 +1017,7 @@ class DualSetupApp:
             self.state.cloud_approved = True
 
         bank = self._text_input(
-            "4 / 7  HINDSIGHT",
+            "5 / 8  HINDSIGHT",
             "Hindsight bank",
             "Use a bank name unique to this project and environment.",
             self.state.hindsight_bank_id,
@@ -885,36 +1041,195 @@ class DualSetupApp:
             return "Enter an http:// or https:// URL."
         return None
 
+    def _architecture(self) -> None:
+        items = [
+            MenuItem(
+                "Dual memory",
+                "Hindsight for normal memory; Mnemosyne for verified checkpoints and bounded fallback.",
+            ),
+            MenuItem(
+                "Hindsight only",
+                "Hindsight handles every memory operation; Mnemosyne is not installed or configured.",
+            ),
+        ]
+        default = 0 if self.state.architecture == ARCH_DUAL else 1
+        choice = self._menu(
+            "4 / 8  ARCHITECTURE",
+            "Choose the memory architecture",
+            "Dual memory adds a verified-checkpoint ledger. Hindsight-only keeps a single backend.",
+            items,
+            default=default,
+        )
+        if choice == -1:
+            return self._identity()
+        self.state.architecture = ARCH_DUAL if choice == 0 else ARCH_HINDSIGHT_ONLY
+        if choice == 1:
+            # Hindsight-only: no Mnemosyne dependency, no embeddings step.
+            self.state.mnemosyne_install_requested = False
+
+    def _embeddings(self) -> None:
+        if self.state.architecture != ARCH_DUAL:
+            return
+        items = [
+            MenuItem(
+                "OpenAI-compatible API",
+                "Remote embeddings via an OpenAI-compatible /v1/embeddings endpoint.",
+            ),
+            MenuItem(
+                "Existing backend configuration",
+                "Keep whatever embedding backend Hindsight and Mnemosyne already have configured.",
+            ),
+        ]
+        choice = self._menu(
+            "5 / 8  EMBEDDINGS",
+            "Embedding backend",
+            "Semantic embeddings power Mnemosyne checkpoint recall. Configure a provider-neutral endpoint.",
+            items,
+            default=0,
+        )
+        if choice == -1:
+            return self._hindsight()
+        if choice == 1:
+            return  # preserve existing backend configuration
+        # Provider-neutral OpenAI-compatible embedding configuration.
+        url = self._text_input(
+            "5 / 8  EMBEDDINGS",
+            "Embedding API base URL",
+            "OpenAI-compatible /v1 endpoint, e.g. https://api.example.com/v1",
+            self.state.embedding_api_url or "https://api.example.com/v1",
+            validator=lambda value: (
+                None
+                if value.startswith(("http://", "https://"))
+                else "Enter an http:// or https:// URL."
+            ),
+        )
+        if url is None:
+            return self._embeddings()
+        self.state.embedding_api_url = url
+        model = self._text_input(
+            "5 / 8  EMBEDDINGS",
+            "Embedding model",
+            "Model identifier served by the endpoint, e.g. bge-small-en",
+            self.state.embedding_model or "bge-small-en",
+            validator=lambda value: None if value.strip() else "Enter a model name.",
+        )
+        if model is None:
+            return self._embeddings()
+        self.state.embedding_model = model
+        dims = self._text_input(
+            "5 / 8  EMBEDDINGS",
+            "Embedding dimensions",
+            "Vector dimensions produced by the model, e.g. 384",
+            str(self.state.embedding_dimensions or 384),
+            validator=lambda value: (
+                None if value.strip().isdigit() and int(value) > 0 else "Enter a positive integer."
+            ),
+        )
+        if dims is None:
+            return self._embeddings()
+        self.state.embedding_dimensions = int(dims)
+        batch = self._text_input(
+            "5 / 8  EMBEDDINGS",
+            "Embedding batch size",
+            "Maximum items per embedding request, e.g. 64",
+            str(self.state.embedding_batch_size or 64),
+            validator=lambda value: (
+                None if value.strip().isdigit() and int(value) > 0 else "Enter a positive integer."
+            ),
+        )
+        if batch is None:
+            return self._embeddings()
+        self.state.embedding_batch_size = int(batch)
+        key_env = self._text_input(
+            "5 / 8  EMBEDDINGS",
+            "Embedding API key environment variable",
+            "Name of the secret env var holding the key (written to $HERMES_HOME/.env). Leave blank for no auth.",
+            self.state.embedding_api_key_env or "",
+            validator=lambda value: (
+                None
+                if not value or _NAME_RE.fullmatch(value)
+                else "Use a valid environment variable name."
+            ),
+        )
+        if key_env is None:
+            return self._embeddings()
+        self.state.embedding_api_key_env = key_env
+
     def _review(self) -> None:
         mode = (
             "Hindsight Cloud" if self.state.hindsight_mode == "cloud" else "self-hosted Hindsight"
         )
+        native = self.state.origin == SetupOrigin.HERMES_PLUGIN
+        arch = "Dual memory" if self.state.architecture == ARCH_DUAL else "Hindsight only"
         lines = [
             f"Hermes home:       {self.state.hermes_home}",
             f"Namespace:         {self.state.namespace}",
             f"Environment:       {self.state.environment}",
+            f"Architecture:      {arch}",
             f"Primary:           {mode}",
             f"Hindsight API:     {self.state.hindsight_api_url}",
             f"Hindsight bank:    {self.state.hindsight_bank_id}",
-            f"Mnemosyne bank:    {self.state.namespace}-{self.state.environment}-checkpoints",
-            "",
-            *explain_dual_mode(),
-            "",
-            "Actions:",
-            "  1. Install router and bounded Mnemosyne dependency into Hermes' own Python.",
-            "  2. Install one Hermes memory-provider entry.",
-            "  3. Back up Hermes, Hindsight, router, and secret configuration.",
-            "  4. Write strict profile-scoped configuration.",
-            "  5. Verify both backends before activating the router.",
-            "  6. Activate chronalyn as the sole external provider.",
-            "",
-            "No historical memory migration. No telemetry. No raw tool-message retention. No core patching.",
         ]
+        if self.state.architecture == ARCH_DUAL:
+            lines.append(
+                f"Mnemosyne bank:    {self.state.namespace}-{self.state.environment}-checkpoints"
+            )
+            if self.state.embedding_api_url:
+                lines.extend(
+                    [
+                        "Embeddings:",
+                        f"  API base URL:  {self.state.embedding_api_url}",
+                        f"  Model:         {self.state.embedding_model}",
+                        f"  Dimensions:    {self.state.embedding_dimensions}",
+                        f"  Batch size:    {self.state.embedding_batch_size}",
+                        f"  Key env var:   {self.state.embedding_api_key_env or '(none)'}",
+                    ]
+                )
+        lines.append("")
+        if native:
+            lines.append("Installation:")
+            lines.append("  Chronalyn plugin         already installed by Hermes")
+            lines.append("  Reinstall Chronalyn      NO")
+            lines.append("  Provider entry           already present (Hermes-managed Git clone)")
+            lines.append("  Release wheel install    NO")
+        lines.extend(
+            [
+                "",
+                "Actions:",
+            ]
+        )
+        if native:
+            lines.append("  ✓ back up configuration")
+            if self.state.architecture == ARCH_DUAL and self.state.mnemosyne_install_requested:
+                lines.append("  ✓ install missing Mnemosyne dependency (only if absent)")
+            lines.append("  ✓ write Chronalyn config")
+            lines.append("  ✓ configure backend credentials")
+            lines.append("  ✓ verify Hindsight")
+            if self.state.architecture == ARCH_DUAL:
+                lines.append("  ✓ initialize/verify Mnemosyne")
+            lines.append("  ✓ activate memory.provider=chronalyn")
+            lines.append("")
+            lines.append("  ✗ no Chronalyn wheel installation")
+            lines.append("  ✗ no plugin directory replacement")
+            lines.append("  ✗ no historical Hindsight migration")
+        else:
+            lines.append(
+                "  1. Install router and bounded Mnemosyne dependency into Hermes' own Python."
+            )
+            lines.append("  2. Install one Hermes memory-provider entry.")
+            lines.append("  3. Back up Hermes, Hindsight, router, and secret configuration.")
+            lines.append("  4. Write strict profile-scoped configuration.")
+            lines.append("  5. Verify both backends before activating the router.")
+            lines.append("  6. Activate chronalyn as the sole external provider.")
+            lines.append("")
+            lines.append(
+                "No historical memory migration. No telemetry. No raw tool-message retention. No core patching."
+            )
         confirmed = self._show_info(
-            "6 / 7  REVIEW",
+            "7 / 8  REVIEW",
             "Review the complete installation plan",
             lines,
-            continue_label="ENTER install dual mode   B revise",
+            continue_label="ENTER apply   B revise",
             allow_back=True,
         )
         if not confirmed:
@@ -928,30 +1243,48 @@ class DualSetupApp:
         assert self.state.runtime is not None
         runtime = self.state.runtime
         backup: Path | None = None
+        native = self.state.origin == SetupOrigin.HERMES_PLUGIN
+        dual = self.state.architecture == ARCH_DUAL
 
         def apply_task(log: Callable[[str], None]) -> None:
             nonlocal backup
-            log("Installing the router in Hermes' Python environment")
-            install_router_into_runtime(
-                runtime,
-                package_source=self.state.package_source,
-                dual=True,
-                hermes_home=self.state.hermes_home,
-                log=log,
-            )
-            log("Creating rollback backup before plugin or configuration changes")
+            # Backup FIRST: every consequential configuration mutation must
+            # happen after the rollback point exists.
+            log("Creating rollback backup before any configuration changes")
             backup = backup_configuration(
                 self.state.hermes_home,
                 reason=f"{identity.BRAND} {identity.RELEASE_NAME} guided setup",
             )
             self.state.backup_path = backup
             try:
-                log("Installing the Hermes memory-provider entry")
-                install_plugin_entry(
-                    runtime,
-                    hermes_home=self.state.hermes_home,
-                    log=log,
-                )
+                if not native:
+                    # Standalone flow only: install the router package (and
+                    # Mnemosyne when dual) into Hermes' Python, plus the
+                    # provider entry. A Hermes-managed Git plugin is never
+                    # reinstalled from a wheel, and its directory is never
+                    # replaced by a Chronalyn-generated shim.
+                    log("Installing the router in Hermes' Python environment")
+                    install_router_into_runtime(
+                        runtime,
+                        package_source=self.state.package_source,
+                        dual=dual,
+                        hermes_home=self.state.hermes_home,
+                        log=log,
+                    )
+                    log("Installing the Hermes memory-provider entry")
+                    install_plugin_entry(
+                        runtime,
+                        hermes_home=self.state.hermes_home,
+                        log=log,
+                    )
+                else:
+                    log(
+                        "Hermes-managed Chronalyn plugin detected; skipping package and provider-entry install"
+                    )
+
+                if dual and self.state.mnemosyne_install_requested:
+                    _ensure_mnemosyne_dependency(runtime, log=log)
+
                 write_hindsight_profile_config(
                     self.state.hermes_home,
                     mode=self.state.hindsight_mode,
@@ -970,10 +1303,22 @@ class DualSetupApp:
 
                     os.environ["HINDSIGHT_API_KEY"] = self.state.hindsight_api_key
 
+                if dual and self.state.embedding_api_url:
+                    _write_embedding_env(
+                        self.state.hermes_home,
+                        api_url=self.state.embedding_api_url,
+                        model=self.state.embedding_model,
+                        dimensions=self.state.embedding_dimensions,
+                        batch_size=self.state.embedding_batch_size,
+                        key_env=self.state.embedding_api_key_env,
+                        log=log,
+                    )
+
+                policy = HINDSIGHT_MNEMOSYNE if dual else HINDSIGHT_ONLY
                 config = new_config(
                     namespace=self.state.namespace,
                     environment=self.state.environment,
-                    policy=HINDSIGHT_MNEMOSYNE,
+                    policy=policy,
                 )
                 config.hindsight.api_url = self.state.hindsight_api_url
                 config.hindsight.bank_id = self.state.hindsight_bank_id
@@ -981,9 +1326,10 @@ class DualSetupApp:
                     f"project:{self.state.namespace}",
                     f"environment:{self.state.environment}",
                 ]
-                config.mnemosyne.bank = (
-                    f"{self.state.namespace}-{self.state.environment}-checkpoints"
-                )
+                if dual:
+                    config.mnemosyne.bank = (
+                        f"{self.state.namespace}-{self.state.environment}-checkpoints"
+                    )
                 config.redaction.mode = (
                     "reject" if self.state.environment.lower() == "production" else "redact"
                 )
@@ -994,7 +1340,7 @@ class DualSetupApp:
                     config,
                 )
 
-                log("Verifying Hindsight and Mnemosyne inside Hermes' Python runtime")
+                log("Verifying backends inside Hermes' Python runtime")
                 self.state.status = verify_router_in_runtime(
                     runtime,
                     hermes_home=self.state.hermes_home,
@@ -1017,32 +1363,43 @@ class DualSetupApp:
                         f"Hermes did not activate {identity.PROVIDER_ID} as the sole "
                         "external memory provider"
                     )
-                command_link = link_router_command(runtime)
-                log(f"{identity.BRAND} command linked at {command_link}")
-                log("Strict dual mode activated")
+                if not native:
+                    command_link = link_router_command(runtime)
+                    log(f"{identity.BRAND} command linked at {command_link}")
+                log("Dual memory activated" if dual else "Hindsight-only mode activated")
             except BaseException:
                 if backup is not None:
                     log("Setup failed; restoring the pre-change configuration")
                     restore_backup(self.state.hermes_home, backup)
                 raise
 
-        self._run_task("7 / 7  INSTALL", "Install and verify strict dual mode", apply_task)
+        self._run_task(
+            "8 / 8  INSTALL",
+            "Apply and verify configuration",
+            apply_task,
+        )
 
     def _complete(self) -> None:
         backup = str(self.state.backup_path or "not created")
         log_path = str(self.log_path or "")
+        dual = self.state.architecture == ARCH_DUAL
         lines = [
-            "STRICT DUAL MODE IS ACTIVE",
+            ("DUAL MEMORY IS ACTIVE" if dual else "HINDSIGHT-ONLY MODE IS ACTIVE"),
             "",
             "Hindsight:  automatic memory / recall / reflect",
-            "Mnemosyne:  verified checkpoints / bounded fallback",
-            f"Backup:     {backup}",
-            f"Setup log:  {log_path}",
-            "",
-            "Next checks:",
-            "  hermes setup            # configure model/gateway if this was a fresh Hermes install",
-            "  hermes memory status",
         ]
+        if dual:
+            lines.append("Mnemosyne:  verified checkpoints / bounded fallback")
+        lines.extend(
+            [
+                f"Backup:     {backup}",
+                f"Setup log:  {log_path}",
+                "",
+                "Next checks:",
+                "  hermes setup            # configure model/gateway if this was a fresh Hermes install",
+                "  hermes memory status",
+            ]
+        )
         if not self.state.launched_from_hermes:
             lines.append(f"  {identity.CLI_COMMAND} status")
         lines.extend(
@@ -1069,11 +1426,14 @@ def run_dual_setup(
     mouse: bool = True,
     with_browser: bool = False,
     launched_from_hermes: bool = False,
+    origin: str | None = None,
 ) -> int:
     state = DualSetupState(
         hermes_home=hermes_home.expanduser(),
         package_source=package_source,
         with_browser=with_browser,
         launched_from_hermes=launched_from_hermes,
+        origin=origin
+        or (SetupOrigin.HERMES_PLUGIN if launched_from_hermes else SetupOrigin.STANDALONE),
     )
     return DualSetupApp(state, mouse=mouse).run()
