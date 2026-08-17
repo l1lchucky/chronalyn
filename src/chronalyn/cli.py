@@ -194,6 +194,15 @@ def _status_human(payload: dict[str, Any]) -> str:
             f"Oldest incomplete delivery: {oldest['state']} {oldest['backend']} "
             f"{oldest['operation']} ({oldest['age_seconds']:.0f}s old)"
         )
+    managed = payload.get("managed_hindsight")
+    if isinstance(managed, dict) and managed.get("configured"):
+        if managed.get("healthy"):
+            status = "healthy"
+        elif managed.get("running"):
+            status = "running"
+        else:
+            status = "stopped"
+        lines.append(f"Managed Hindsight: {status} ({managed.get('api_url', '')})")
     for category in ("warnings", "degraded", "unsafe"):
         lines.extend(f"{category[:-1].upper()}: {message}" for message in payload.get(category, []))
     return "\n".join(lines)
@@ -453,6 +462,32 @@ def main(argv: list[str] | None = None) -> int:
                         else None
                     )
                     payload = router.status(integrity=integrity)
+                    # Report the Chronalyn-managed Hindsight service when the
+                    # current configuration uses managed_local mode.
+                    try:
+                        if config.hindsight.api_url.startswith("http://127.0.0.1"):
+                            from .managed import managed_state
+
+                            mstate = managed_state(home)
+                            payload["managed_hindsight"] = {
+                                "configured": mstate.installed,
+                                "installed": mstate.installed,
+                                "running": mstate.running,
+                                "healthy": mstate.healthy,
+                                "api_url": mstate.api_url,
+                                "error": mstate.error or None,
+                            }
+                    except Exception:
+                        # Status reporting must never crash on managed-state
+                        # inspection problems.
+                        payload["managed_hindsight"] = {
+                            "configured": False,
+                            "installed": False,
+                            "running": False,
+                            "healthy": False,
+                            "api_url": config.hindsight.api_url,
+                            "error": "managed state unavailable",
+                        }
                 _print(args, payload, human=_status_human(payload))
                 if args.command == "doctor":
                     exit_code = payload.get("exit_code")

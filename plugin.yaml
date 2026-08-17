@@ -1,5 +1,5 @@
 name: chronalyn
-version: 1.0.0
+version: 1.1.0
 description: Chronalyn — long-term memory for Hermes using Hindsight history and verified Mnemosyne checkpoints.
 kind: exclusive
 author: Chucky

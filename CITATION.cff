@@ -6,7 +6,7 @@ abstract: >-
   provides deeper history and semantic recall; Mnemosyne keeps verified
   checkpoints with bounded fallback.
 type: software
-version: "1.0.0"
+version: "1.1.0"
 date-released: "2026-08-17"
 authors:
   - family-names: "Chucky"

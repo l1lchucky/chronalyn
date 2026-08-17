@@ -2,8 +2,8 @@
 set -euo pipefail
 umask 077
 
-VERSION="1.0.0"
-PY_VERSION="1.0.0"
+VERSION="1.1.0"
+PY_VERSION="1.1.0"
 TAG="v${VERSION}"
 REPO="l1lchucky/chronalyn"
 WHEEL="chronalyn-${PY_VERSION}-py3-none-any.whl"

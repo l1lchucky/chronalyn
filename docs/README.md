@@ -7,6 +7,7 @@ for verified checkpoints and bounded fallback; one provider visible to Hermes.
 ## Getting started
 
 - [Installation](installation.md) — install Chronalyn for Hermes Agent
+- [Managed Hindsight](managed-hindsight.md) — 1.1 managed local install
 - [Guided setup](guided-setup.md) — the interactive setup wizard
 - [Why use the router?](why-use-the-router.md) — the problem Chronalyn solves
 

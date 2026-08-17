@@ -2,6 +2,44 @@
 
 The project follows Semantic Versioning and the Keep a Changelog format.
 
+## [Unreleased]
+
+## [1.1.0] - unreleased
+
+Managed lightweight Hindsight for fresh installations.
+
+### Added
+
+- **Lightweight local Hindsight (managed)** — a new option in the guided setup
+  that installs, configures, and starts a local Hindsight API automatically:
+  isolated venv under `$HERMES_HOME/hindsight-managed/`, `hindsight-api-slim`
+  with embedded PostgreSQL + pgvector, remote OpenAI-compatible LLM and
+  embeddings, one API worker, access log off, loopback-only.
+- **Four-input setup** — for managed mode the wizard asks only for the
+  OpenAI-compatible base URL, API key, LLM model, and embedding model.
+- **Automatic embedding-dimension detection** — the installer probes the
+  embedding endpoint before starting Hindsight.
+- **Managed service lifecycle** — systemd `--user` service (auto-start,
+  restart on failure) when available, launcher-script fallback otherwise;
+  never requires sudo; never touches external Hindsight processes.
+- **`chronalyn status` / `chronalyn doctor`** now report the managed Hindsight
+  service state (running / stopped / unhealthy).
+- **Mnemosyne wiring** — same remote embedding provider/model as Hindsight,
+  LLM disabled, `top_k=5`, separate checkpoint bank.
+
+### Changed
+
+- Version 1.1.0.
+
+### Unchanged
+
+- Routing policy is unchanged: normal/retain/reflect reach Hindsight only,
+  checkpoint reaches Hindsight + Mnemosyne, recall is Hindsight-first with
+  bounded Mnemosyne fallback, merged recall remains prohibited.
+- Existing external Hindsight configurations are never started, stopped, or
+  modified by Chronalyn.
+- No automatic memory migration or re-embedding.
+
 ## [1.0.0] - 2026-08-17
 
 First stable release.

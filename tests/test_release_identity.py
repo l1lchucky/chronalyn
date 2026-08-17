@@ -21,8 +21,8 @@ def _pyproject() -> dict[str, object]:
 
 def test_identity_version_matches_pyproject() -> None:
     project = _pyproject()["project"]
-    assert project["version"] == identity.VERSION == "1.0.0"
-    assert identity.RELEASE_NAME == "v1.0.0"
+    assert project["version"] == identity.VERSION == "1.1.0"
+    assert identity.RELEASE_NAME == "v1.1.0"
     assert identity.IS_RELEASE_CANDIDATE is False
 
 
@@ -41,8 +41,8 @@ def test_release_identity_is_stable_not_rc() -> None:
     # The stable tree must not carry release-candidate version strings.
     assert "rc" not in identity.VERSION.lower()
     assert "rc" not in identity.RELEASE_NAME.lower()
-    assert identity.SBOM == "chronalyn-v1.0.0.spdx.json"
-    assert identity.CHECKSUMS == "SHA256SUMS-chronalyn-v1.0.0.txt"
+    assert identity.SBOM == "chronalyn-v1.1.0.spdx.json"
+    assert identity.CHECKSUMS == "SHA256SUMS-chronalyn-v1.1.0.txt"
 
 
 def test_repository_identity_uses_canonical_slug() -> None:

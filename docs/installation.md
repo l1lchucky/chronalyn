@@ -29,8 +29,19 @@ The wizard offers two architectures:
 - **Dual memory** — Mnemosyne additionally keeps verified checkpoints, with
   bounded fallback when Hindsight has no answer.
 
-In dual mode the wizard also configures a provider-neutral embedding backend
-(OpenAI-compatible API) for Mnemosyne semantic recall.
+In dual mode the wizard also asks how Hindsight should be provided:
+
+- **Lightweight local Hindsight (managed)** — Chronalyn installs and starts a
+  local Hindsight API for you (see
+  [Managed Hindsight](managed-hindsight.md)). You only supply an
+  OpenAI-compatible base URL, API key, LLM model, and embedding model.
+- **Self-hosted / existing Hindsight** — connect to a Hindsight API you
+  already run; Chronalyn only connects and never manages its process.
+- **Hindsight Cloud** — connect to the hosted Hindsight Cloud service.
+
+In dual mode with remote embeddings, the wizard also configures a
+provider-neutral embedding backend (OpenAI-compatible API) for Mnemosyne
+semantic recall.
 
 Verify with:
 
