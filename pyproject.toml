@@ -18,19 +18,18 @@ maintainers = [
 keywords = [
   "chronalyn",
   "hermes-agent",
-  "nousresearch",
   "ai-agent",
-  "ai-agent-memory",
+  "ai-memory",
   "agent-memory",
   "llm-memory",
   "memory-provider",
   "memory-orchestration",
   "persistent-memory",
+  "semantic-memory",
   "durable-memory",
   "hindsight",
   "mnemosyne",
   "checkpointing",
-  "sqlite",
   "python",
 ]
 classifiers = [

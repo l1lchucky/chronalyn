@@ -2,6 +2,26 @@
 
 The project follows Semantic Versioning and the Keep a Changelog format.
 
+## [Unreleased]
+
+### Added
+
+- **Native Hermes plugin installation.** Chronalyn can be installed from inside
+  Hermes with `hermes plugins install l1lchucky/hermes-memory-router`, then
+  selected in `hermes memory setup`. The Chronalyn wizard runs inside the Hermes
+  flow via the provider's `post_setup` hook — no separate CLI step is required.
+- **Hindsight embedding-backend guidance** in the configuration docs:
+  embedding providers are interchangeable as long as the target vector index is
+  rebuilt (equal dimensions do not imply compatible vector spaces).
+- **Hindsight 0.9 metadata compatibility** — outbound Hindsight metadata is
+  normalized to `dict[str, str]` deterministically, without mutating caller
+  metadata.
+
+### Changed
+
+- README recommended installation path is now the Hermes-native flow; the
+  Python package path (`pip install chronalyn`) remains supported.
+
 ## [1.0.0-rc.1] - 2026-08-04
 
 This is a **release candidate**. Local tests do not prove production readiness.

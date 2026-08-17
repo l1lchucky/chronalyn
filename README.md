@@ -12,15 +12,35 @@ fallback, backed by durable SQLite delivery, retry, and deletion controls.
 **What is implemented today:** this release candidate delivers one thing —
 reliable memory orchestration for Hermes Agent, shipped as **Chronalyn for
 Hermes**. Chronalyn gives Hindsight and Mnemosyne separate jobs instead of
-letting them compete for every turn.
+letting them compete for every turn. Roadmap modules (Console, Intelligence)
+are **not implemented** in this release.
 
-Hermes sees one external memory provider. Behind that provider:
+Hermes sees **one** external memory provider. Behind that provider:
+
+```text
+Hermes Agent
+    |
+    v
+ Chronalyn
+    |
+    +-- Hindsight   persistent memory / recall / reflection
+    |
+    +-- Mnemosyne   verified checkpoints / bounded fallback
+```
 
 - **Hindsight** handles normal automatic memory, recall, and reflection.
 - **Mnemosyne** keeps deliberate, evidence-backed checkpoints and can act as a
   small fallback when Hindsight is unavailable or has no answer.
 - A local **SQLite control database** tracks writes, retries, backend IDs,
   deletions, and the active environment.
+
+Chronalyn is a **Hermes memory plugin**: install it from inside Hermes, then
+pick it as your memory provider.
+
+```bash
+hermes plugins install l1lchucky/hermes-memory-router
+hermes memory setup
+```
 
 > **Current release:** `1.0.0rc1` (`v1.0.0-rc.1`) — a **release candidate**.
 > Local tests do not prove production readiness. Live Hindsight and Mnemosyne
