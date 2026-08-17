@@ -120,7 +120,10 @@ print("runtime:", state.runtime.python)
 """
     # Simpler: verify origin semantics + that find_hermes_runtime works from the clone
     # (the plugin's own sys.path bootstrap). The apply worker itself is covered by unit tests.
-    r = run([str(HERMES_PY), "-c", apply_script.replace("%CHRONALYN_SRC%", str(plugin_dir / "src"))], env)
+    r = run(
+        [str(HERMES_PY), "-c", apply_script],
+        {**env, "CHRONALYN_SRC": str(plugin_dir / "src")},
+    )
     print(r.stdout.strip() if r.stdout else r.stderr[-500:])
     check("native_origin_resolution", "origin: hermes_plugin" in r.stdout)
     check("runtime_found", "runtime:" in r.stdout)
