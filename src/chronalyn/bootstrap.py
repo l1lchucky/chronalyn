@@ -196,14 +196,21 @@ def find_hermes_runtime(hermes_home: Path) -> HermesRuntime | None:
         ]
     )
 
-    python_path = next(
-        (
-            path.expanduser().resolve()
-            for path in candidates
-            if path.expanduser().is_file() and os.access(path.expanduser(), os.X_OK)
-        ),
-        None,
-    )
+    def _usable(p: Path) -> Path | None:
+        expanded = p.expanduser()
+        if not (expanded.is_file() and os.access(expanded, os.X_OK)):
+            return None
+        # A venv's bin/python is often a symlink into a shared interpreter
+        # (uv-managed pythons, pyenv, etc.). Collapsing it with resolve()
+        # would run the base interpreter WITHOUT the venv's site-packages,
+        # breaking imports of packages installed into the venv (e.g.
+        # mnemosyne). Prefer keeping the venv path intact. The venv marker
+        # (pyvenv.cfg) lives at the venv root, one level above bin/.
+        if (expanded.parent.parent / "pyvenv.cfg").exists():
+            return expanded
+        return expanded.resolve()
+
+    python_path = next((u for p in candidates if (u := _usable(p)) is not None), None)
     if command_path is None or python_path is None:
         return None
 
