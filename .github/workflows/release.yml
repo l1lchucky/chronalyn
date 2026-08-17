@@ -53,7 +53,44 @@ jobs:
         with:
           name: distributions
           path: dist/*
+      - name: Upload Python distributions
+        # Dedicated artifact containing only the Python distribution files.
+        # The PyPI Trusted Publishing job downloads this and nothing else, so
+        # install-dual.sh, SBOM, and checksum assets never reach PyPI.
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-package-distributions
+          path: |
+            dist/chronalyn-*.whl
+            dist/chronalyn-*.tar.gz
+          if-no-files-found: error
       - uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: dist/*
+
+  publish-pypi:
+    name: Publish Chronalyn to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only the stable tag pattern v<major>.<minor>.<patch> publishes to PyPI.
+    # Pre-releases (v1.1.0-rc.1, v1.1.0-alpha.1, ...) keep the GitHub Release
+    # flow and never reach PyPI. The explicit tag guard also keeps this job
+    # inert for non-tag workflow runs.
+    if: startsWith(github.ref, 'refs/tags/') && github.ref_name matches '^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+    environment:
+      name: pypi
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

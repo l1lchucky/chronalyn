@@ -66,6 +66,22 @@ Before making the repository public:
 
 ## PyPI
 
-Publish stable releases to PyPI when the release channel is ready. Use GitHub
-Trusted Publishing instead of a long-lived PyPI token. Until PyPI publishing
-is configured, GitHub Releases is the available release channel.
+Stable releases publish to PyPI automatically through GitHub Trusted
+Publishing (OIDC); no token or password is stored in the repository. The
+`release.yml` workflow builds the Python distributions, attaches them to the
+GitHub Release, and — only for stable tags matching `v<major>.<minor>.<patch>`
+— publishes the wheel and sdist to the `pypi` GitHub environment.
+
+Before the first stable tag, create the `pypi` GitHub environment (empty, no
+secrets) and register a **Pending Trusted Publisher** on PyPI:
+
+```text
+PyPI project name: chronalyn
+GitHub owner:      l1lchucky
+Repository:        chronalyn
+Workflow:          release.yml
+Environment:       pypi
+```
+
+Pre-release tags (`v1.1.0-rc.1`, `v1.1.0-alpha.1`, ...) keep the existing
+GitHub Release flow and never publish to PyPI.
