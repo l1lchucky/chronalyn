@@ -73,11 +73,11 @@ jobs:
     name: Publish Chronalyn to PyPI
     needs: build
     runs-on: ubuntu-latest
-    # Only the stable tag pattern v<major>.<minor>.<patch> publishes to PyPI.
-    # Pre-releases (v1.1.0-rc.1, v1.1.0-alpha.1, ...) keep the GitHub Release
-    # flow and never reach PyPI. The explicit tag guard also keeps this job
-    # inert for non-tag workflow runs.
-    if: startsWith(github.ref, 'refs/tags/') && github.ref_name matches '^v[0-9]+\.[0-9]+\.[0-9]+$'
+    # Only stable tags v<major>.<minor>.<patch> publish to PyPI. Pre-releases
+    # (v1.1.0-rc.1, v1.1.0-alpha.1, ...) keep the GitHub Release flow and never
+    # reach PyPI. The tag guard also keeps this job inert for non-tag runs;
+    # the per-step publish gate below lets pre-releases complete the release
+    # workflow without failing.
 
     environment:
       name: pypi
@@ -86,11 +86,23 @@ jobs:
       id-token: write
 
     steps:
+      - name: Determine whether this is a stable release tag
+        id: stable_tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download Python distributions
+        if: steps.stable_tag.outputs.publish == 'true'
         uses: actions/download-artifact@v7
         with:
           name: python-package-distributions
           path: dist/
 
       - name: Publish package to PyPI
+        if: steps.stable_tag.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
