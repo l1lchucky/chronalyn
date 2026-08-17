@@ -75,7 +75,29 @@ network call, as the contract requires.
 
 ## Installation and activation flow
 
-`chronalyn setup` performs these steps in order. Nothing is mutated before the
+There are two equivalent entry points into the same wizard:
+
+- **Native Hermes flow (recommended):**
+
+  ```bash
+  hermes plugins install l1lchucky/hermes-memory-router
+  hermes memory setup        # choose Chronalyn
+  ```
+
+  `hermes memory setup` detects the provider's `post_setup(hermes_home, config)`
+  hook and delegates the whole wizard to it, so the user never leaves the Hermes
+  flow. Chronalyn's `post_setup` calls the same `run_dual_setup()` engine the
+  standalone CLI uses, with `launched_from_hermes=True` so its completion screen
+  points at `hermes memory status` rather than the standalone CLI.
+
+- **Standalone flow (manual / developer):**
+
+  ```bash
+  python -m pip install chronalyn
+  chronalyn setup
+  ```
+
+Both run the same steps in order. Nothing is mutated before the
 preview is shown and confirmed.
 
 1. **Install Chronalyn** into Hermes' own Python runtime.

@@ -81,6 +81,7 @@ class DualSetupState:
     installer_receipt: DownloadReceipt | None = None
     backup_path: Path | None = None
     status: dict[str, object] = field(default_factory=dict)
+    launched_from_hermes: bool = False
 
 
 @dataclass(frozen=True)
@@ -1041,12 +1042,17 @@ class DualSetupApp:
             "Next checks:",
             "  hermes setup            # configure model/gateway if this was a fresh Hermes install",
             "  hermes memory status",
-            f"  {identity.CLI_COMMAND} status",
-            "  ./scripts/live-smoke-test.sh",
-            "",
-            "Rollback never deletes memory data:",
-            f"  {identity.CLI_COMMAND} rollback --yes",
         ]
+        if not self.state.launched_from_hermes:
+            lines.append(f"  {identity.CLI_COMMAND} status")
+        lines.extend(
+            [
+                "  ./scripts/live-smoke-test.sh",
+                "",
+                "Rollback never deletes memory data:",
+                f"  {identity.CLI_COMMAND} rollback --yes",
+            ]
+        )
         self._show_info(
             "COMPLETE",
             f"{identity.BRAND} {identity.RELEASE_NAME} is ready",
@@ -1062,10 +1068,12 @@ def run_dual_setup(
     package_source: str = "",
     mouse: bool = True,
     with_browser: bool = False,
+    launched_from_hermes: bool = False,
 ) -> int:
     state = DualSetupState(
         hermes_home=hermes_home.expanduser(),
         package_source=package_source,
         with_browser=with_browser,
+        launched_from_hermes=launched_from_hermes,
     )
     return DualSetupApp(state, mouse=mouse).run()

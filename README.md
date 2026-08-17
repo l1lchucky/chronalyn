@@ -93,15 +93,35 @@ Requirements:
 - a reachable Hindsight API;
 - `mnemosyne-memory` only when dual mode is selected.
 
+### Recommended: install from Hermes
+
+```bash
+hermes plugins install l1lchucky/hermes-memory-router
+hermes memory setup
+```
+
+Then choose **Chronalyn** in the memory provider picker. The Chronalyn wizard
+runs inside the same flow: it detects your Hermes installation and any existing
+direct Hindsight configuration, previews every change, backs up configuration,
+activates Chronalyn as the single external memory provider, then validates
+provider discovery and health. When it finishes, `memory.provider` is set to
+`chronalyn`.
+
+Verify with:
+
+```bash
+hermes memory status
+```
+
+### Python package (manual / developer install)
+
 ```bash
 python -m pip install chronalyn
 chronalyn setup
 ```
 
-`chronalyn setup` is guided and non-destructive until you confirm. It detects
-your Hermes installation and any existing direct Hindsight configuration,
-previews every change, backs up configuration, activates Chronalyn as the single
-external memory provider, then validates provider discovery and health.
+`chronalyn setup` is guided and non-destructive until you confirm, and is the
+same wizard the Hermes flow runs.
 
 Full walkthrough: [Installation](docs/installation.md) and
 [Guided setup](docs/guided-setup.md).
