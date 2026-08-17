@@ -57,6 +57,11 @@ chronalyn install-plugin
 chronalyn setup
 ```
 
+Installing the package alone does not configure Hermes: `chronalyn
+install-plugin` writes the provider entry Hermes discovers, and `chronalyn
+setup` launches the guided wizard. The recommended Hermes flow above performs
+both steps for you.
+
 If you manage Hermes' environment yourself, install into that interpreter
 explicitly:
 

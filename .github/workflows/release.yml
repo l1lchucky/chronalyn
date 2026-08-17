@@ -12,11 +12,22 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      stable_release: ${{ steps.release_meta.outputs.stable_release }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Determine whether this is a stable release tag
+        id: release_meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "stable_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable_release=false" >> "$GITHUB_OUTPUT"
+          fi
       - run: python -m pip install build
       - run: python -m build
       - name: Add reviewed bootstrap asset
@@ -53,7 +64,46 @@ jobs:
         with:
           name: distributions
           path: dist/*
+      - name: Upload Python distributions
+        # Dedicated artifact containing only the Python distribution files.
+        # The PyPI Trusted Publishing job downloads this and nothing else, so
+        # install-dual.sh, SBOM, and checksum assets never reach PyPI.
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-package-distributions
+          path: |
+            dist/chronalyn-*.whl
+            dist/chronalyn-*.tar.gz
+          if-no-files-found: error
       - uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: dist/*
+
+  publish-pypi:
+    name: Publish Chronalyn to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only stable tags v<major>.<minor>.<patch> publish to PyPI. The decision
+    # is made in the build job (which runs for every v* tag) and carried here
+    # via the needs output. Because this job is skipped for pre-releases, the
+    # pypi environment (and any manual approval protection on it) is never
+    # requested for v1.1.0-rc.1 / -alpha.1 / -beta.1 / -dev tags; those keep
+    # the GitHub prerelease flow and never touch PyPI.
+    if: needs.build.outputs.stable_release == 'true'
+
+    environment:
+      name: pypi
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

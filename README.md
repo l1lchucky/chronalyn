@@ -84,12 +84,18 @@ Two modes are available:
 
 Verify with `hermes memory status`.
 
-### Python package (developer install)
+### Python package (direct install)
 
 ```bash
 python -m pip install chronalyn
 chronalyn setup
 ```
+
+This gives you the `chronalyn` CLI and the importable package. Installing the
+package alone does not configure Hermes; `chronalyn setup` runs the same guided
+wizard as the Hermes flow when you are ready. Hermes users should prefer the
+recommended Hermes installation above, which installs the provider entry and
+drives the wizard from `hermes memory setup`.
 
 Full walkthrough: [Installation](docs/installation.md) and
 [Guided setup](docs/guided-setup.md).
