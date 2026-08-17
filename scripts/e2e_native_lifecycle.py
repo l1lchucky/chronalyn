@@ -27,7 +27,10 @@ import tempfile
 from pathlib import Path
 
 HERMES_SOURCE = Path(os.environ.get("HERMES_AGENT_SOURCE", Path.home() / ".hermes" / "hermes-agent"))
-REPO_URL = os.environ.get("CHRONALYN_REPO_URL", "file:///home/endorphin/src/chronalyn-fix")
+REPO_URL = os.environ.get("CHRONALYN_REPO_URL")
+if not REPO_URL:
+    print("CHRONALYN_REPO_URL must point at a Chronalyn git source (e.g. a local clone)")
+    sys.exit(2)
 HERMES_PY = HERMES_SOURCE / "venv" / "bin" / "python"
 HERMES_BIN = HERMES_SOURCE / "venv" / "bin" / "hermes"
 
@@ -107,7 +110,7 @@ state = DualSetupState(
     namespace="e2e",
     environment="test",
     hindsight_mode="local_external",
-    hindsight_api_url="http://127.0.0.1:18888",  # unreachable on purpose? No - use a live one
+    hindsight_api_url="http://127.0.0.1:19999",
     hindsight_bank_id="e2e-test",
     mnemosyne_install_requested=False,
 )
