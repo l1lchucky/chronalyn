@@ -489,11 +489,13 @@ def write_hindsight_profile_config(
     api_url: str,
     bank_id: str,
 ) -> Path:
-    if mode not in {"cloud", "local_external"}:
+    if mode not in {"cloud", "local_external", "managed_local"}:
         raise ConfigurationError(
-            "The strict dual router supports Hindsight Cloud or an external "
-            "self-hosted Hindsight API; embedded lifecycle mode is not managed."
+            "The strict dual router supports Hindsight Cloud, an external "
+            "self-hosted Hindsight API, or Chronalyn-managed local Hindsight."
         )
+    # For managed_local, the service is started by Chronalyn; the router still
+    # needs the same connection metadata so its adapter can reach it.
     path = hermes_home / "hindsight" / "config.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, object] = {}

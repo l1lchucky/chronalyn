@@ -26,8 +26,8 @@ HERMES_COMPONENT = "Chronalyn"
 
 # -- Versions ---------------------------------------------------------------
 # Python/PEP 440 version and the human release name must stay in lockstep.
-VERSION = "1.0.0"
-RELEASE_NAME = "v1.0.0"
+VERSION = "1.1.0"
+RELEASE_NAME = "v1.1.0"
 RELEASE_TAG = RELEASE_NAME
 IS_RELEASE_CANDIDATE = False
 

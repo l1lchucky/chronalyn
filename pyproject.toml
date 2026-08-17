@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chronalyn"
-version = "1.0.0"
+version = "1.1.0"
 description = "Long-term memory orchestration for Hermes Agent with Hindsight and Mnemosyne."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -131,6 +131,10 @@ ignore = ["S101"]
 "src/chronalyn/setup_tui.py" = [
   "E501", "F841", "RUF059", "S110", "SIM102", "SIM105", "S603",
 ] # Interactive curses boundary; formatting remains enforced.
+"src/chronalyn/managed.py" = [
+  "S310", "S603", "S607",
+] # Managed service only calls user-supplied HTTP endpoints, loopback probes,
+  # and fixed-argv subprocesses (no shell, no file:// schemes).
 
 [tool.mypy]
 python_version = "3.11"

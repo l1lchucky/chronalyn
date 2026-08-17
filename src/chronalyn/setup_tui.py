@@ -37,6 +37,13 @@ from .compatibility import (
 )
 from .config import new_config, write_config
 from .exceptions import ConfigurationError
+from .managed import (
+    build_env_file,
+    detect_embedding_dimensions,
+    install_hindsight,
+    register_managed_service,
+    start_hindsight,
+)
 from .policy import HINDSIGHT_MNEMOSYNE, HINDSIGHT_ONLY
 
 MNEMOSYNE_PACKAGE = "mnemosyne-memory"
@@ -128,19 +135,20 @@ def _write_embedding_env(
     batch_size: int,
     key_env: str,
     log: Callable[[str], None],
+    managed_hindsight: bool = False,
 ) -> None:
     """Write provider-neutral embedding configuration into the secret env.
 
     The key VALUE is never stored in normal config, logs, or status output:
     only the environment-variable NAME is recorded. If a key value is already
     present in the Hermes secret env, it is left untouched.
+
+    When ``managed_hindsight`` is true, the Hindsight-side embedding variables
+    are skipped: the managed service env file owns them (and overrides the
+    Hermes env file for the managed process). Mnemosyne's variables are always
+    written.
     """
-    env_writes = {
-        "HINDSIGHT_API_EMBEDDINGS_PROVIDER": "openai",
-        "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": api_url,
-        "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": model,
-        "HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS": str(dimensions),
-        "HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE": str(batch_size),
+    env_writes: dict[str, str] = {
         "MNEMOSYNE_EMBEDDING_MODEL": model,
         "MNEMOSYNE_EMBEDDING_DIM": str(dimensions),
         "MNEMOSYNE_EMBEDDING_API_URL": api_url,
@@ -148,9 +156,20 @@ def _write_embedding_env(
         "MNEMOSYNE_EMBEDDING_QUERY_PREFIX": "query: ",
         "MNEMOSYNE_EMBEDDING_DOC_PREFIX": "passage: ",
     }
+    if not managed_hindsight:
+        env_writes.update(
+            {
+                "HINDSIGHT_API_EMBEDDINGS_PROVIDER": "openai",
+                "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": api_url,
+                "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": model,
+                "HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS": str(dimensions),
+                "HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE": str(batch_size),
+            }
+        )
     if key_env:
-        env_writes["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = "${" + key_env + "}"
         env_writes["MNEMOSYNE_EMBEDDING_API_KEY"] = "${" + key_env + "}"
+        if not managed_hindsight:
+            env_writes["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = "${" + key_env + "}"
     write_secret_env(hermes_home, env_writes)
     log("Wrote provider-neutral embedding configuration to the secret env")
 
@@ -160,6 +179,10 @@ BRAND = "CHRONALYN"
 SUBTITLE = "MEMORY ORCHESTRATION FOR HERMES"
 MIN_WIDTH = 72
 MIN_HEIGHT = 22
+
+# Managed lightweight Hindsight (1.1): loopback-only, fixed port.
+MANAGED_HOST = "127.0.0.1"
+MANAGED_PORT = 8888
 
 
 class SetupOrigin:
@@ -209,6 +232,9 @@ class DualSetupState:
     hindsight_api_url: str = "http://127.0.0.1:8888"
     hindsight_bank_id: str = "my-project-staging"
     hindsight_api_key: str = ""
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_api_key: str = ""
     cloud_approved: bool = False
     with_browser: bool = False
     acknowledgements: set[int] = field(default_factory=set)
@@ -946,6 +972,10 @@ class DualSetupApp:
                 "Connect to Hindsight Cloud",
                 "Sanitized automatic memory leaves this machine over HTTPS; raw tool messages stay disabled.",
             ),
+            MenuItem(
+                "Lightweight local Hindsight (managed)",
+                "Chronalyn installs and starts a local Hindsight API using your remote OpenAI-compatible LLM and embeddings.",
+            ),
         ]
         default = 0 if detected else 1
         choice = self._menu(
@@ -963,7 +993,7 @@ class DualSetupApp:
             self.state.hindsight_bank_id = str(state.hindsight_bank_id)
             self.state.hindsight_mode = (
                 state.hindsight_mode
-                if state.hindsight_mode in {"cloud", "local_external"}
+                if state.hindsight_mode in {"cloud", "local_external", "managed_local"}
                 else ("cloud" if state.hindsight_is_cloud else "local_external")
             )
             return
@@ -991,7 +1021,7 @@ class DualSetupApp:
             if key is None:
                 return self._hindsight()
             self.state.hindsight_api_key = key
-        else:
+        elif choice == 2:
             self.state.hindsight_mode = "cloud"
             url = self._text_input(
                 "5 / 8  HINDSIGHT",
@@ -1015,6 +1045,12 @@ class DualSetupApp:
                 return self._hindsight()
             self.state.hindsight_api_key = key
             self.state.cloud_approved = True
+        elif choice == 3:
+            self.state.hindsight_mode = "managed_local"
+            self.state.hindsight_api_url = f"http://{MANAGED_HOST}:{MANAGED_PORT}"
+            self.state.hindsight_api_key = ""
+            if not self._managed_local():
+                return self._hindsight()
 
         bank = self._text_input(
             "5 / 8  HINDSIGHT",
@@ -1026,6 +1062,58 @@ class DualSetupApp:
         if bank is None:
             return self._hindsight()
         self.state.hindsight_bank_id = bank
+
+    def _managed_local(self) -> bool:
+        """Collect the four inputs for managed local Hindsight.
+
+        Returns False when the user backs out so the caller can restart the
+        Hindsight step.
+        """
+        base = self._text_input(
+            "5 / 8  MANAGED HINDSIGHT",
+            "OpenAI-compatible API base URL",
+            "Used for both the LLM and embeddings. Example: https://api.example.com/v1",
+            self.state.llm_base_url,
+            validator=self._validate_url,
+        )
+        if base is None:
+            return False
+        self.state.llm_base_url = base
+        self.state.embedding_api_url = base
+        key = self._text_input(
+            "5 / 8  MANAGED HINDSIGHT",
+            "API key",
+            "Masked and written only to the managed Hindsight env file with owner-only permissions.",
+            self.state.llm_api_key,
+            secret=True,
+            validator=lambda value: None if value else "An API key is required.",
+        )
+        if key is None:
+            return False
+        self.state.llm_api_key = key
+        llm_model = self._text_input(
+            "5 / 8  MANAGED HINDSIGHT",
+            "LLM model",
+            "Model name for Hindsight summarization and reflection.",
+            self.state.llm_model,
+            validator=lambda value: None if value.strip() else "Enter an LLM model name.",
+        )
+        if llm_model is None:
+            return False
+        self.state.llm_model = llm_model
+        embedding_model = self._text_input(
+            "5 / 8  MANAGED HINDSIGHT",
+            "Embedding model",
+            "Model name for semantic vectors (used by Hindsight and Mnemosyne).",
+            self.state.embedding_model,
+            validator=lambda value: None if value.strip() else "Enter an embedding model name.",
+        )
+        if embedding_model is None:
+            return False
+        self.state.embedding_model = embedding_model
+        self.state.embedding_api_key_env = "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"
+        self.state.embedding_batch_size = 64
+        return True
 
     @staticmethod
     def _validate_name(value: str) -> str | None:
@@ -1069,6 +1157,10 @@ class DualSetupApp:
 
     def _embeddings(self) -> None:
         if self.state.architecture != ARCH_DUAL:
+            return
+        if self.state.hindsight_mode == "managed_local":
+            # Managed mode already collected the embedding endpoint/model;
+            # dimension detection happens during apply.
             return
         items = [
             MenuItem(
@@ -1156,9 +1248,11 @@ class DualSetupApp:
         self.state.embedding_api_key_env = key_env
 
     def _review(self) -> None:
-        mode = (
-            "Hindsight Cloud" if self.state.hindsight_mode == "cloud" else "self-hosted Hindsight"
-        )
+        mode = {
+            "cloud": "Hindsight Cloud",
+            "local_external": "self-hosted Hindsight",
+            "managed_local": "managed lightweight local Hindsight",
+        }.get(self.state.hindsight_mode, self.state.hindsight_mode)
         native = self.state.origin == SetupOrigin.HERMES_PLUGIN
         arch = "Dual memory" if self.state.architecture == ARCH_DUAL else "Hindsight only"
         lines = [
@@ -1202,6 +1296,9 @@ class DualSetupApp:
             lines.append("  ✓ back up configuration")
             if self.state.architecture == ARCH_DUAL and self.state.mnemosyne_install_requested:
                 lines.append("  ✓ install missing Mnemosyne dependency (only if absent)")
+            if self.state.hindsight_mode == "managed_local":
+                lines.append("  ✓ install managed lightweight Hindsight (isolated venv)")
+                lines.append("  ✓ start + register managed Hindsight (loopback only)")
             lines.append("  ✓ write Chronalyn config")
             lines.append("  ✓ configure backend credentials")
             lines.append("  ✓ verify Hindsight")
@@ -1285,6 +1382,33 @@ class DualSetupApp:
                 if dual and self.state.mnemosyne_install_requested:
                     _ensure_mnemosyne_dependency(runtime, log=log)
 
+                if self.state.hindsight_mode == "managed_local":
+                    log("Installing the managed lightweight Hindsight service")
+                    install_hindsight(self.state.hermes_home, log=log)
+                    if not self.state.embedding_dimensions:
+                        log("Detecting embedding dimensions from the remote endpoint")
+                        self.state.embedding_dimensions = detect_embedding_dimensions(
+                            api_url=self.state.embedding_api_url,
+                            api_key=self.state.llm_api_key,
+                            model=self.state.embedding_model,
+                        )
+                        log(f"Embedding dimensions: {self.state.embedding_dimensions}")
+                    env_file = build_env_file(
+                        self.state.hermes_home,
+                        llm_base_url=self.state.llm_base_url,
+                        llm_api_key=self.state.llm_api_key,
+                        llm_model=self.state.llm_model,
+                        embedding_base_url=self.state.embedding_api_url,
+                        embedding_api_key=self.state.llm_api_key,
+                        embedding_model=self.state.embedding_model,
+                        embedding_dimensions=self.state.embedding_dimensions,
+                    )
+                    log(f"Managed Hindsight env written: {env_file}")
+                    log("Starting managed Hindsight")
+                    start_hindsight(self.state.hermes_home, log=log)
+                    mechanism = register_managed_service(self.state.hermes_home, log=log)
+                    log(f"Managed Hindsight lifecycle: {mechanism}")
+
                 write_hindsight_profile_config(
                     self.state.hermes_home,
                     mode=self.state.hindsight_mode,
@@ -1312,6 +1436,7 @@ class DualSetupApp:
                         batch_size=self.state.embedding_batch_size,
                         key_env=self.state.embedding_api_key_env,
                         log=log,
+                        managed_hindsight=self.state.hindsight_mode == "managed_local",
                     )
 
                 policy = HINDSIGHT_MNEMOSYNE if dual else HINDSIGHT_ONLY
