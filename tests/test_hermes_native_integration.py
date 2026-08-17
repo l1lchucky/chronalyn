@@ -13,6 +13,8 @@ locations; the tests skip cleanly when no Hermes source is importable.
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -39,7 +41,10 @@ def _hermes_source() -> Path | None:
 
 
 HERMES = _hermes_source()
-requires_hermes = pytest.mark.skipif(HERMES is None, reason="Hermes source not importable")
+requires_hermes = pytest.mark.skipif(
+    HERMES is None or importlib.util.find_spec("yaml") is None,
+    reason="Hermes source (or its yaml dependency) not importable",
+)
 
 
 def _load_hermes_discovery():
@@ -64,9 +69,14 @@ def test_git_plugin_install_layout_is_valid() -> None:
 
 
 def test_plugin_manifest_parses_and_declares_identity() -> None:
-    import yaml
-
-    manifest = yaml.safe_load((REPO_ROOT / "plugin.yaml").read_text(encoding="utf-8"))
+    # Parse the simple key: value manifest without a yaml dependency
+    # (pyyaml is not a project dependency; CI installs only .[test]).
+    text = (REPO_ROOT / "plugin.yaml").read_text(encoding="utf-8")
+    manifest: dict[str, str] = {}
+    for line in text.splitlines():
+        if ":" in line and not line.lstrip().startswith("#"):
+            key, _, value = line.partition(":")
+            manifest[key.strip()] = value.strip()
     assert manifest["name"] == identity.PROVIDER_ID
     assert manifest["version"] == identity.RELEASE_NAME.removeprefix("v")
     assert "description" in manifest
