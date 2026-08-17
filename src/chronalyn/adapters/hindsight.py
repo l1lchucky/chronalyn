@@ -87,6 +87,31 @@ class HindsightBackend(MemoryBackend):
                 errors.append(f"{path}: {exc}")
         return {"ok": False, "error": "; ".join(errors)}
 
+    @staticmethod
+    def _serialize_metadata(metadata: dict[str, Any]) -> dict[str, str]:
+        """Normalize metadata for Hindsight's string-valued metadata contract.
+
+        Hindsight's retain API validates metadata as ``dict[str, str]``. The
+        router stores structured metadata internally (e.g. ``redaction_findings``
+        as a list, ``truncated`` as a bool), so non-string values are
+        deterministically JSON-serialized at this outbound boundary only.
+        ``str`` values pass through unchanged; ``None`` becomes ``"null"``.
+        Non-JSON-serializable values are not produced by current models and
+        propagate as a ``TypeError`` rather than being silently dropped.
+        """
+        normalized: dict[str, str] = {}
+        for key, value in metadata.items():
+            if isinstance(value, str):
+                normalized[str(key)] = value
+            else:
+                normalized[str(key)] = json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+        return normalized
+
     def retain(
         self,
         *,
@@ -97,14 +122,15 @@ class HindsightBackend(MemoryBackend):
     ) -> BackendReceipt:
         document_id = f"memory-router:{record_id}"
         bank = urllib.parse.quote(self.config.bank_id, safe="")
+        raw_metadata = {
+            **metadata,
+            "memory_router_record_id": record_id,
+            "memory_router_kind": kind,
+        }
         item: dict[str, Any] = {
             "content": content,
             "document_id": document_id,
-            "metadata": {
-                **metadata,
-                "memory_router_record_id": record_id,
-                "memory_router_kind": kind,
-            },
+            "metadata": self._serialize_metadata(raw_metadata),
         }
         if self.config.tags:
             item["tags"] = self.config.tags

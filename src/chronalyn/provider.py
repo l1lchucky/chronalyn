@@ -154,7 +154,30 @@ class ChronalynMemoryProvider(MemoryProvider):
             },
         )
 
+    def _ensure_config_loaded(self) -> None:
+        """Load the router config before initialize() if needed.
+
+        Hermes v0.20.0 indexes provider tool schemas in
+        ``MemoryManager.add_provider()``, which runs *before*
+        ``initialize_all()``. A provider must therefore be able to answer
+        ``get_tool_schemas()`` without waiting for initialization; otherwise
+        its tools are advertised to the model but rejected at dispatch time
+        (``has_tool`` is False in the routing table). Loading the config
+        lazily from HERMES_HOME keeps the tool table correct at registration.
+        """
+        if self._config is not None:
+            return
+        home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser()
+        config_path = home / "memory-router" / "config.json"
+        if not config_path.exists():
+            return
+        try:
+            self._config = load_config(config_path)
+        except Exception:
+            logger.debug("Could not pre-load router config for tool schemas", exc_info=True)
+
     def get_tool_schemas(self) -> list[dict[str, Any]]:
+        self._ensure_config_loaded()
         if not self._config:
             return []
         return tool_schemas_for(self._config)

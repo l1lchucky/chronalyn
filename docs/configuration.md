@@ -67,3 +67,32 @@ conditions, and fallback character budget. The setup defaults are appropriate
 for most installations.
 
 See `examples/staging.json` and `examples/production.json` for complete files.
+
+## Hindsight embedding backends
+
+Chronalyn does not own Hindsight's embedding implementation. Hindsight may use a
+local embedding model or a remote embedding service, independently of anything
+configured here; the router only speaks to Hindsight's HTTP API.
+
+A few facts worth knowing when the Hindsight embedding backend changes:
+
+- Changing the embedding backend normally requires rebuilding or re-embedding the
+  Hindsight vector index. Existing vectors are not automatically valid under a
+  new embedding model.
+- Two embedding models producing the same vector dimensionality do **not** imply
+  that their vectors share the same vector space. Same width is not same space.
+- Existing vectors from different embedding models must not be mixed in the same
+  index unless the embedding system explicitly guarantees compatibility.
+- A safe migration preserves the logical memories and source documents while
+  creating fresh embeddings with the target model.
+- Where Hindsight provides a native transfer mechanism that preserves logical
+  facts while regenerating target embeddings, that mechanism may be preferable to
+  re-running fact extraction: re-extraction can change fact segmentation or omit
+  previously accepted facts.
+- Chronalyn's routing policy does not need to change merely because Hindsight's
+  embedding backend changes — the router configuration (bank id, tags, recall
+  types) is orthogonal to how Hindsight embeds.
+
+If you migrate an existing bank, keep the old index available until the new one
+has been validated end to end, and prefer documented transfer mechanisms over
+copying vector data.
