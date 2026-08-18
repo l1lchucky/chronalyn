@@ -16,7 +16,7 @@ jobs:
       stable_release: ${{ steps.release_meta.outputs.stable_release }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Determine whether this is a stable release tag
